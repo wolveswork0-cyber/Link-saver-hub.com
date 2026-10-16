@@ -1,81 +1,62 @@
-const form = document.querySelector('#form');
-const input = document.querySelector('#url');
-const msg = document.querySelector('#msg');
-const list = document.querySelector('#list');
+const API_URL = "https://linkdrop-pro-3clf.onrender.com/api/download";
 
-let history = JSON.parse(
-  localStorage.getItem('linkdrop-history') || '[]'
-);
+const form = document.getElementById("downloadForm");
+const input = document.getElementById("urlInput");
+const status = document.getElementById("status");
 
-function render() {
-  list.innerHTML = history.length
-    ? history.map((u, i) =>
-        `<div class="item">
-          <a href="${u}" target="_blank" rel="noopener">${u}</a>
-          <button onclick="removeItem(${i})">×</button>
-        </div>`
-      ).join('')
-    : '<p class="empty">No downloads yet.</p>';
-}
-
-function removeItem(i) {
-  history.splice(i, 1);
-  localStorage.setItem(
-    'linkdrop-history',
-    JSON.stringify(history)
-  );
-  render();
-}
-
-document.querySelector('#clear').onclick = () => {
-  history = [];
-  localStorage.removeItem('linkdrop-history');
-  render();
-};
-
-form.onsubmit = e => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
+  const url = input.value.trim();
+
+  if (!url || !/^https?:\/\//i.test(url)) {
+    status.textContent = "Please enter a valid URL.";
+    return;
+  }
+
+  status.textContent = "Preparing download... Please wait.";
+
   try {
-    const u = new URL(input.value.trim());
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ url })
+    });
 
-    if (!/^https?:$/.test(u.protocol)) throw 0;
+    if (!response.ok) {
+      let message = "Download failed.";
+      try {
+        const data = await response.json();
+        message = data.error || message;
+      } catch {}
+      throw new Error(message);
+    }
 
-    const a = document.createElement('a');
-    a.href = u.href;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.download = '';
+    const blob = await response.blob();
 
+    const disposition = response.headers.get("Content-Disposition");
+    let filename = "download";
+
+    if (disposition) {
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      if (match) filename = match[1];
+    }
+
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
 
-    history = [
-      u.href,
-      ...history.filter(x => x !== u.href)
-    ].slice(0, 10);
+    URL.revokeObjectURL(downloadUrl);
 
-    localStorage.setItem(
-      'linkdrop-history',
-      JSON.stringify(history)
-    );
-
-    render();
-
-    msg.textContent =
-      'Download request sent. If a webpage opens, the host does not allow direct browser downloading.';
-
-    input.value = '';
-
-  } catch {
-    msg.textContent =
-      'Please enter a valid HTTP/HTTPS link.';
+    status.textContent = "Download started successfully.";
+  } catch (error) {
+    console.error(error);
+    status.textContent = error.message || "Download failed.";
   }
-};
-
-document.querySelector('#theme').onclick = () => {
-  document.body.classList.toggle('dark');
-};
-
-render();
+});
