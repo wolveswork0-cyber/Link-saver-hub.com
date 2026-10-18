@@ -42,12 +42,12 @@ def download():
         "quiet": True,
         "no_warnings": True,
 
-        # YouTube JavaScript runtime
         "js_runtimes": {
-            "deno": "/opt/render/.deno/bin/deno"
+            "deno": {
+                "path": "/opt/render/.deno/bin/deno"
+            }
         },
 
-        # yt-dlp EJS components
         "remote_components": ["ejs:github"],
 
         "format": "best[ext=mp4]/best"
