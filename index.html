@@ -1,29 +1,252 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LinkDrop Pro — Universal Link Downloader</title>
 <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-<header><div class="brand"><span>↓</span> LinkDrop <b>PRO</b></div><button id="theme">☾</button></header>
+
+<header>
+  <div class="brand"><span>↓</span> LinkDrop <b>PRO</b></div>
+  <button id="theme">☾</button>
+</header>
+
 <main>
+
 <section class="hero">
+
 <p class="badge">FAST • SIMPLE • MOBILE READY</p>
+
 <h1>Download from a link.</h1>
-<p>Paste a direct, publicly accessible file URL and download it with one click.</p>
-<form id="form"><input id="url" type="url" placeholder="Paste https://…/file.mp4" required><button>Download</button></form>
+
+<p>
+Paste a public YouTube, TikTok, Facebook, Instagram, X/Twitter,
+Snapchat or other supported URL.
+</p>
+
+<form id="form">
+
+<input
+  id="url"
+  type="url"
+  placeholder="Paste video URL here..."
+  required
+>
+
+<button type="submit" id="downloadBtn">
+  Download
+</button>
+
+</form>
+
 <div id="msg"></div>
+
 </section>
+
+
 <section class="features">
-<div><strong>⚡ Fast</strong><span>Browser-based downloads for direct files.</span></div>
-<div><strong>🔒 Safer</strong><span>No passwords or account credentials are requested.</span></div>
-<div><strong>📱 Responsive</strong><span>Works on phone, tablet and desktop.</span></div>
+
+<div>
+<strong>⚡ Fast</strong>
+<span>Server-powered media processing.</span>
+</div>
+
+<div>
+<strong>🔒 Safer</strong>
+<span>No passwords or account credentials are requested.</span>
+</div>
+
+<div>
+<strong>📱 Responsive</strong>
+<span>Works on phone, tablet and desktop.</span>
+</div>
+
 </section>
-<section class="history"><div class="sectionHead"><h2>Recent links</h2><button id="clear">Clear</button></div><div id="list"><p class="empty">No downloads yet.</p></div></section>
-<section class="notice"><b>Supported:</b> direct/public files such as PDF, ZIP, JPG, PNG, MP3, MP4 and other files served by their host.<br>
-<b>Limitation:</b> a website cannot legitimately guarantee downloads from every platform. CORS, authentication, DRM, hotlink protection and platform terms can prevent access. This version does not bypass those protections.</section>
+
+
+<section class="history">
+
+<div class="sectionHead">
+<h2>Recent links</h2>
+<button id="clear">Clear</button>
+</div>
+
+<div id="list">
+<p class="empty">No downloads yet.</p>
+</div>
+
+</section>
+
+
+<section class="notice">
+
+<b>Supported:</b>
+Public URLs from supported platforms such as YouTube and other
+platforms that the backend extractor can access.
+
+<br><br>
+
+<b>Note:</b>
+Private, login-required, DRM-protected or otherwise restricted
+content may not be downloadable.
+
+</section>
+
 </main>
-<footer>© 2026 LinkDrop Pro</footer>
-<script src="script.js"></script>
-</body></html>
+
+<footer>
+© 2026 LinkDrop Pro
+</footer>
+
+
+<script>
+
+const API_URL = "https://linkdrop-pro-3clf.onrender.com";
+
+const form = document.getElementById("form");
+const input = document.getElementById("url");
+const msg = document.getElementById("msg");
+const button = document.getElementById("downloadBtn");
+const list = document.getElementById("list");
+const clearBtn = document.getElementById("clear");
+const themeBtn = document.getElementById("theme");
+
+
+function showMessage(text, type = "") {
+
+  msg.textContent = text;
+  msg.className = type;
+
+}
+
+
+function addHistory(url) {
+
+  const item = document.createElement("p");
+
+  item.textContent = url;
+
+  list.prepend(item);
+
+}
+
+
+form.addEventListener("submit", async function(event) {
+
+  event.preventDefault();
+
+  const url = input.value.trim();
+
+  if (!url) {
+    showMessage("Please enter a URL.", "error");
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Processing...";
+  showMessage("Downloading... please wait.", "loading");
+
+  try {
+
+    const response = await fetch(API_URL + "/api/download", {
+
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+        url: url
+      })
+
+    });
+
+
+    if (!response.ok) {
+
+      let errorText = "Download failed.";
+
+      try {
+
+        const errorData = await response.json();
+
+        if (errorData.details) {
+          errorText = errorData.details;
+        } else if (errorData.error) {
+          errorText = errorData.error;
+        }
+
+      } catch (e) {}
+
+      throw new Error(errorText);
+
+    }
+
+
+    const blob = await response.blob();
+
+    const downloadUrl = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+
+    a.href = downloadUrl;
+
+    a.download = "LinkDrop-Download";
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    a.remove();
+
+    window.URL.revokeObjectURL(downloadUrl);
+
+
+    showMessage("Download started successfully.", "success");
+
+    addHistory(url);
+
+    input.value = "";
+
+  } catch (error) {
+
+    console.error(error);
+
+    showMessage(
+      "Download failed: " + error.message,
+      "error"
+    );
+
+  } finally {
+
+    button.disabled = false;
+    button.textContent = "Download";
+
+  }
+
+});
+
+
+clearBtn.addEventListener("click", function() {
+
+  list.innerHTML =
+    '<p class="empty">No downloads yet.</p>';
+
+});
+
+
+themeBtn.addEventListener("click", function() {
+
+  document.body.classList.toggle("dark");
+
+});
+
+
+</script>
+
+</body>
+</html>
