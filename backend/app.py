@@ -41,9 +41,17 @@ def download():
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+
+        # YouTube JavaScript runtime
+        "js_runtimes": {
+            "deno": "/opt/render/.deno/bin/deno"
+        },
+
+        # yt-dlp EJS components
+        "remote_components": ["ejs:github"],
+
         "format": "best[ext=mp4]/best"
     }
-    
 
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
@@ -69,7 +77,7 @@ def download():
     except Exception as e:
         return jsonify({
             "error": "URL could not be downloaded.",
-            "details": str(e)[:500]
+            "details": str(e)[:1000]
         }), 400
 
 
