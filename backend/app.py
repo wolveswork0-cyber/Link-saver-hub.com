@@ -37,21 +37,12 @@ def download():
     template = str(folder / "%(title).120s.%(ext)s")
 
     options = {
-        "outtmpl": template,
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-
-        "js_runtimes": {
-            "deno": {
-                "path": "/opt/render/.deno/bin/deno"
-            }
-        },
-
-        "remote_components": ["ejs:github"],
-
-        "format": "best[ext=mp4]/best"
-    }
+    "outtmpl": template,
+    "noplaylist": True,
+    "quiet": True,
+    "no_warnings": True,
+    "format": "best[ext=mp4]/best"
+}
 
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
