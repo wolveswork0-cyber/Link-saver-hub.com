@@ -55,7 +55,7 @@ def download():
         "js_runtimes": {
     "deno": {
         "path": "/opt/render/.deno/bin/deno",
-        "args": []
+        "args":
     }
 },
             }
