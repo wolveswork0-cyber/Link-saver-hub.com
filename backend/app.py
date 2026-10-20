@@ -6,8 +6,9 @@ import uuid
 import os
 from pathlib import Path
 
-# Make Deno available to yt-dlp at runtime
-os.environ["PATH"] = "/opt/render/.deno/bin:" + os.environ.get("PATH", "")
+# Make Deno available at runtime
+DENO_PATH = "/opt/render/.deno/bin"
+os.environ["PATH"] = DENO_PATH + ":" + os.environ.get("PATH", "")
 
 app = Flask(__name__)
 CORS(app)
@@ -42,27 +43,33 @@ def download():
     options = {
         "outtmpl": template,
         "noplaylist": True,
+
+        # Show useful yt-dlp logs in Render
         "quiet": False,
         "no_warnings": False,
 
         # Best available video/audio
         "format": "bestvideo*+bestaudio/best",
 
-        # YouTube JavaScript challenge support
+        # YouTube JavaScript runtime
         "js_runtimes": {
             "deno": {
                 "path": "/opt/render/.deno/bin/deno"
             }
         },
 
-        # Allow yt-dlp EJS components
-        "remote_components": {
-            "ejs": "github"
-        },
+        # yt-dlp EJS remote component
+        "remote_components": [
+            "ejs:github"
+        ],
 
+        # Network settings
         "socket_timeout": 30,
         "retries": 3,
         "fragment_retries": 3,
+
+        # Avoid playlists
+        "noplaylist": True,
     }
 
     try:
@@ -70,6 +77,7 @@ def download():
             info = ydl.extract_info(url, download=True)
             filename = Path(ydl.prepare_filename(info))
 
+        # Fallback if prepared filename does not exist
         if not filename.exists():
             files = list(folder.iterdir())
 
@@ -91,6 +99,10 @@ def download():
             "error": "URL could not be downloaded.",
             "details": str(e)[:1500]
         }), 400
+
+    finally:
+        # Do not delete the file here because send_file still needs it.
+        pass
 
 
 if __name__ == "__main__":
