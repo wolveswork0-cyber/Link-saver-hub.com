@@ -43,36 +43,23 @@ def download():
     options = {
         "outtmpl": template,
         "noplaylist": True,
-
-        # Show useful yt-dlp logs in Render
         "quiet": False,
         "no_warnings": False,
-
-        # Best available video/audio
         "format": "bestvideo*+bestaudio/best",
 
-        # YouTube JavaScript runtime
         "js_runtimes": {
-    "deno": {
-        "path": "/opt/render/.deno/bin/deno",
-        "args":
-    }
-},
+            "deno": {
+                "path": "/opt/render/.deno/bin/deno"
             }
         },
 
-        # yt-dlp EJS remote component
         "remote_components": [
             "ejs:github"
         ],
 
-        # Network settings
         "socket_timeout": 30,
         "retries": 3,
-        "fragment_retries": 3,
-
-        # Avoid playlists
-        "noplaylist": True,
+        "fragment_retries": 3
     }
 
     try:
@@ -80,7 +67,6 @@ def download():
             info = ydl.extract_info(url, download=True)
             filename = Path(ydl.prepare_filename(info))
 
-        # Fallback if prepared filename does not exist
         if not filename.exists():
             files = list(folder.iterdir())
 
@@ -102,10 +88,6 @@ def download():
             "error": "URL could not be downloaded.",
             "details": str(e)[:1500]
         }), 400
-
-    finally:
-        # Do not delete the file here because send_file still needs it.
-        pass
 
 
 if __name__ == "__main__":
