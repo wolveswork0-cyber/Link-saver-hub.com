@@ -6,6 +6,9 @@ import uuid
 import os
 from pathlib import Path
 
+# Make Deno available to yt-dlp at runtime
+os.environ["PATH"] = "/opt/render/.deno/bin:" + os.environ.get("PATH", "")
+
 app = Flask(__name__)
 CORS(app)
 
@@ -37,12 +40,30 @@ def download():
     template = str(folder / "%(title).120s.%(ext)s")
 
     options = {
-    "outtmpl": template,
-    "noplaylist": True,
-    "quiet": True,
-    "no_warnings": True,
-    "format": "best[ext=mp4]/best"
-}
+        "outtmpl": template,
+        "noplaylist": True,
+        "quiet": False,
+        "no_warnings": False,
+
+        # Best available video/audio
+        "format": "bestvideo*+bestaudio/best",
+
+        # YouTube JavaScript challenge support
+        "js_runtimes": {
+            "deno": {
+                "path": "/opt/render/.deno/bin/deno"
+            }
+        },
+
+        # Allow yt-dlp EJS components
+        "remote_components": {
+            "ejs": "github"
+        },
+
+        "socket_timeout": 30,
+        "retries": 3,
+        "fragment_retries": 3,
+    }
 
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
@@ -68,7 +89,7 @@ def download():
     except Exception as e:
         return jsonify({
             "error": "URL could not be downloaded.",
-            "details": str(e)[:1000]
+            "details": str(e)[:1500]
         }), 400
 
 
