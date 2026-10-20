@@ -53,8 +53,11 @@ def download():
 
         # YouTube JavaScript runtime
         "js_runtimes": {
-            "deno": {
-                "path": "/opt/render/.deno/bin/deno"
+    "deno": {
+        "path": "/opt/render/.deno/bin/deno",
+        "args": []
+    }
+},
             }
         },
 
