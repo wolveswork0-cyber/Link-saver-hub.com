@@ -58,8 +58,10 @@ def download():
 
         # YouTube JavaScript runtime
         "js_runtimes": {
-            "deno": {}
-        },
+    "deno": {
+        "path": "/opt/render/.deno/bin/deno"
+    }
+},
 
         # yt-dlp EJS components
         "remote_components": [
