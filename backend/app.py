@@ -13,7 +13,7 @@ CORS(app)
 BASE = Path(tempfile.gettempdir()) / "linkdrop_pro"
 BASE.mkdir(parents=True, exist_ok=True)
 
-# Deno location on Render
+# Deno on Render
 DENO_PATH = "/opt/render/.deno/bin/deno"
 
 # Make Deno available to yt-dlp
@@ -56,29 +56,51 @@ def download():
 
         "format": "bestvideo*+bestaudio/best",
 
-        # YouTube JavaScript runtime
+        # Deno JavaScript runtime
         "js_runtimes": {
-    "deno": {
-        "path": "/opt/render/.deno/bin/deno"
-    }
-},
+            "deno": {
+                "path": DENO_PATH
+            }
+        },
 
-        # yt-dlp EJS components
+        # yt-dlp EJS
         "remote_components": [
             "ejs:github"
         ],
+
+        # Force IPv4
+        "source_address": "0.0.0.0",
+
+        # YouTube client configuration
+        "extractor_args": {
+            "youtube": {
+                "player_client": [
+                    "web_safari",
+                    "web_embedded",
+                    "-tv_downgraded"
+                ]
+            }
+        },
 
         "socket_timeout": 30,
         "retries": 3,
         "fragment_retries": 3,
     }
 
+    # Optional proxy.
+    # If YTDLP_PROXY is added in Render Environment Variables,
+    # yt-dlp will use it.
+    proxy = os.environ.get("YTDLP_PROXY", "").strip()
+
+    if proxy:
+        options["proxy"] = proxy
+
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = Path(ydl.prepare_filename(info))
 
-        # Sometimes the final extension changes after merging
+        # Final file extension can change after merging
         if not filename.exists():
             files = list(folder.iterdir())
 
@@ -98,7 +120,7 @@ def download():
     except Exception as e:
         return jsonify({
             "error": "URL could not be downloaded.",
-            "details": str(e)[:1500]
+            "details": str(e)[:2000]
         }), 400
 
 
