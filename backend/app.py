@@ -6,15 +6,22 @@ import uuid
 import os
 from pathlib import Path
 
-# Make Deno available at runtime
-DENO_PATH = "/opt/render/.deno/bin"
-os.environ["PATH"] = DENO_PATH + ":" + os.environ.get("PATH", "")
-
 app = Flask(__name__)
 CORS(app)
 
+# Temporary download folder
 BASE = Path(tempfile.gettempdir()) / "linkdrop_pro"
 BASE.mkdir(parents=True, exist_ok=True)
+
+# Deno location on Render
+DENO_PATH = "/opt/render/.deno/bin/deno"
+
+# Make Deno available to yt-dlp
+if os.path.exists(DENO_PATH):
+    os.environ["PATH"] = (
+        "/opt/render/.deno/bin:"
+        + os.environ.get("PATH", "")
+    )
 
 
 @app.get("/")
@@ -43,23 +50,25 @@ def download():
     options = {
         "outtmpl": template,
         "noplaylist": True,
+
         "quiet": False,
         "no_warnings": False,
+
         "format": "bestvideo*+bestaudio/best",
 
+        # YouTube JavaScript runtime
         "js_runtimes": {
-            "deno": {
-                "path": "/opt/render/.deno/bin/deno"
-            }
+            "deno": {}
         },
 
+        # yt-dlp EJS components
         "remote_components": [
             "ejs:github"
         ],
 
         "socket_timeout": 30,
         "retries": 3,
-        "fragment_retries": 3
+        "fragment_retries": 3,
     }
 
     try:
@@ -67,6 +76,7 @@ def download():
             info = ydl.extract_info(url, download=True)
             filename = Path(ydl.prepare_filename(info))
 
+        # Sometimes the final extension changes after merging
         if not filename.exists():
             files = list(folder.iterdir())
 
