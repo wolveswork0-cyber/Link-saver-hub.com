@@ -1,119 +1,143 @@
-const API_URL = "https://linkdrop-pro-3clf.onrender.com/api/download";
+const form = document.querySelector('#form');
+const input = document.querySelector('#url');
+const msg = document.querySelector('#msg');
+const list = document.querySelector('#list');
 
-const form = document.getElementById("form");
-const input = document.getElementById("url");
-const msg = document.getElementById("msg");
-const list = document.getElementById("list");
-const clearBtn = document.getElementById("clear");
+const API_URL = 'https://linkdrop-pro-3clf.onrender.com';
 
-form.addEventListener("submit", async (e) => {
+let history = JSON.parse(
+  localStorage.getItem('linkdrop-history') || '[]'
+);
+
+function render() {
+  list.innerHTML = history.length
+    ? history.map((u, i) => `
+        <div class="item">
+          <a href="${u}" target="_blank" rel="noopener">${u}</a>
+          <button onclick="removeItem(${i})">×</button>
+        </div>
+      `).join('')
+    : '<p class="empty">No downloads yet.</p>';
+}
+
+function removeItem(i) {
+  history.splice(i, 1);
+  localStorage.setItem(
+    'linkdrop-history',
+    JSON.stringify(history)
+  );
+  render();
+}
+
+document.querySelector('#clear').onclick = () => {
+  history = [];
+  localStorage.removeItem('linkdrop-history');
+  render();
+};
+
+form.onsubmit = async (e) => {
   e.preventDefault();
 
   const url = input.value.trim();
 
-  if (!url || !/^https?:\/\//i.test(url)) {
-    msg.textContent = "Please enter a valid URL.";
-    return;
-  }
-
-  msg.textContent = "⏳ Processing... Please wait.";
-  
   try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ url })
-    });
+    const u = new URL(url);
+
+    if (!/^https?:$/.test(u.protocol)) {
+      throw new Error();
+    }
+
+    const choice = prompt(
+      'Download option select karein:\n\n' +
+      '1 = MP4 480p\n' +
+      '2 = MP4 720p\n' +
+      '3 = MP4 1080p\n' +
+      '4 = Best Quality\n' +
+      '5 = MP3 Audio'
+    );
+
+    const options = {
+      '1': { format: 'mp4', quality: '480' },
+      '2': { format: 'mp4', quality: '720' },
+      '3': { format: 'mp4', quality: '1080' },
+      '4': { format: 'mp4', quality: 'best' },
+      '5': { format: 'mp3', quality: 'audio' }
+    };
+
+    if (!options[choice]) {
+      msg.textContent = 'Download cancelled.';
+      return;
+    }
+
+    msg.textContent = 'Preparing download... Please wait.';
+
+    const response = await fetch(
+      API_URL + '/api/download',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: u.href,
+          format: options[choice].format,
+          quality: options[choice].quality
+        })
+      }
+    );
 
     if (!response.ok) {
-      let errorMessage = "Download failed.";
-
-      try {
-        const data = await response.json();
-        errorMessage = data.error || errorMessage;
-      } catch {}
-
-      throw new Error(errorMessage);
+      const error = await response.json().catch(() => ({}));
+      throw new Error(
+        error.details ||
+        error.error ||
+        'Download failed.'
+      );
     }
 
     const blob = await response.blob();
 
-    let filename = "LinkDrop-download";
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
 
-    const disposition = response.headers.get("Content-Disposition");
-
-    if (disposition) {
-      const match = disposition.match(/filename="?([^"]+)"?/i);
-      if (match) {
-        filename = match[1];
-      }
-    }
-
-    const downloadUrl = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = filename;
+    a.href = blobUrl;
+    a.download =
+      options[choice].format === 'mp3'
+        ? 'LinkDrop-Audio.mp3'
+        : 'LinkDrop-Video.mp4';
 
     document.body.appendChild(a);
     a.click();
     a.remove();
 
-    URL.revokeObjectURL(downloadUrl);
+    URL.revokeObjectURL(blobUrl);
 
-    msg.textContent = "✅ Download started.";
+    history = [
+      u.href,
+      ...history.filter(x => x !== u.href)
+    ].slice(0, 10);
 
-    saveHistory(url);
-    input.value = "";
+    localStorage.setItem(
+      'linkdrop-history',
+      JSON.stringify(history)
+    );
+
+    render();
+
+    msg.textContent = 'Download completed.';
+    input.value = '';
 
   } catch (error) {
     console.error(error);
-    msg.textContent = "❌ " + error.message;
+
+    msg.textContent =
+      error.message ||
+      'Please enter a valid HTTP/HTTPS link.';
   }
-});
+};
 
+document.querySelector('#theme').onclick = () => {
+  document.body.classList.toggle('dark');
+};
 
-function saveHistory(url) {
-  let history = JSON.parse(localStorage.getItem("linkdrop_history") || "[]");
-
-  history.unshift(url);
-  history = [...new Set(history)].slice(0, 10);
-
-  localStorage.setItem("linkdrop_history", JSON.stringify(history));
-
-  showHistory();
-}
-
-
-function showHistory() {
-  const history = JSON.parse(localStorage.getItem("linkdrop_history") || "[]");
-
-  if (!history.length) {
-    list.innerHTML = '<p class="empty">No downloads yet.</p>';
-    return;
-  }
-
-  list.innerHTML = history.map(url => `
-    <div class="historyItem">
-      <span>${escapeHtml(url)}</span>
-    </div>
-  `).join("");
-}
-
-
-clearBtn.addEventListener("click", () => {
-  localStorage.removeItem("linkdrop_history");
-  showHistory();
-});
-
-
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-
-showHistory();
+render();
