@@ -14,28 +14,16 @@ CORS(app)
 BASE = Path(tempfile.gettempdir()) / "linkdrop_pro"
 BASE.mkdir(parents=True, exist_ok=True)
 
-# ---------------------------------------------------------
-# Paths
-# ---------------------------------------------------------
-
 DENO_PATH = "/opt/render/.deno/bin/deno"
 BGUTIL_SERVER = "/opt/render/bgutil-ytdlp-pot-provider/server"
 BGUTIL_NODE_MODULES = "/opt/render/bgutil-ytdlp-pot-provider/server/node_modules"
 BGUTIL_PORT = "4416"
-
-# ---------------------------------------------------------
-# Environment
-# ---------------------------------------------------------
 
 if os.path.exists(DENO_PATH):
     os.environ["PATH"] = (
         "/opt/render/.deno/bin:"
         + os.environ.get("PATH", "")
     )
-
-# ---------------------------------------------------------
-# Start BGUTIL PO Token Server
-# ---------------------------------------------------------
 
 _bgutil_process = None
 
@@ -79,31 +67,15 @@ def start_bgutil():
         time.sleep(5)
 
         if _bgutil_process.poll() is None:
-            print(
-                "BGUTIL PO Token server started "
-                "on 127.0.0.1:4416"
-            )
+            print("BGUTIL PO Token server started on 127.0.0.1:4416")
         else:
-            output = ""
-
-            if _bgutil_process.stdout:
-                try:
-                    output = _bgutil_process.stdout.read()
-                except Exception:
-                    pass
-
             print("BGUTIL START FAILED")
-            print(output)
 
     except Exception as e:
         print("BGUTIL START ERROR:", repr(e))
 
 
 start_bgutil()
-
-# ---------------------------------------------------------
-# Home
-# ---------------------------------------------------------
 
 
 @app.get("/")
@@ -114,17 +86,14 @@ def home():
     })
 
 
-# ---------------------------------------------------------
-# Download
-# ---------------------------------------------------------
-
-
 @app.post("/api/download")
 def download():
 
     data = request.get_json(silent=True) or {}
 
     url = (data.get("url") or "").strip()
+    download_format = (data.get("format") or "mp4").lower()
+    quality = (data.get("quality") or "best").lower()
 
     if not url.startswith(("http://", "https://")):
         return jsonify({
@@ -132,32 +101,74 @@ def download():
         }), 400
 
     folder = BASE / uuid.uuid4().hex
-    folder.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    folder.mkdir(parents=True, exist_ok=True)
 
     template = str(
         folder / "%(title).120s.%(ext)s"
     )
 
-    options = {
-        # Output
-        "outtmpl": template,
+    # -----------------------------
+    # FORMAT / QUALITY
+    # -----------------------------
 
-        # Playlist
+    if download_format == "mp3":
+
+        format_selector = "bestaudio/best"
+
+        postprocessors = [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }
+        ]
+
+        merge_format = None
+
+    else:
+
+        if quality == "480":
+            height = 480
+
+        elif quality == "720":
+            height = 720
+
+        elif quality == "1080":
+            height = 1080
+
+        else:
+            height = None
+
+        if height:
+            format_selector = (
+                f"bestvideo[height<={height}]"
+                f"+bestaudio/"
+                f"best[height<={height}]"
+            )
+        else:
+            format_selector = (
+                "bestvideo*+bestaudio/best"
+            )
+
+        postprocessors = []
+        merge_format = "mp4"
+
+    # -----------------------------
+    # YT-DLP OPTIONS
+    # -----------------------------
+
+    options = {
+        "outtmpl": template,
         "noplaylist": True,
 
-        # Logging
         "quiet": False,
         "no_warnings": False,
 
-        # Best available media
-        "format": "bestvideo*+bestaudio/best",
+        "format": format_selector,
 
-        # -------------------------------------------------
-        # JavaScript runtime
-        # -------------------------------------------------
+        "merge_output_format": merge_format,
+
+        "postprocessors": postprocessors,
 
         "js_runtimes": {
             "deno": {
@@ -165,20 +176,11 @@ def download():
             }
         },
 
-        # -------------------------------------------------
-        # Remote EJS
-        # -------------------------------------------------
-
         "remote_components": [
             "ejs:github"
         ],
 
-        # -------------------------------------------------
-        # YouTube
-        # -------------------------------------------------
-
         "extractor_args": {
-
             "youtube": {
                 "player_client": [
                     "mweb",
@@ -186,31 +188,20 @@ def download():
                 ]
             },
 
-            # BGUTIL HTTP PO Token provider
             "youtubepot-bgutilhttp": {
                 "base_url":
                     "http://127.0.0.1:4416"
             }
         },
 
-        # -------------------------------------------------
-        # Network
-        # -------------------------------------------------
-
         "source_address": "0.0.0.0",
 
         "socket_timeout": 30,
 
         "retries": 3,
-
         "fragment_retries": 3,
-
         "extractor_retries": 3,
     }
-
-    # -----------------------------------------------------
-    # Optional proxy
-    # -----------------------------------------------------
 
     proxy = os.environ.get(
         "YTDLP_PROXY",
@@ -220,13 +211,13 @@ def download():
     if proxy:
         options["proxy"] = proxy
 
-    # -----------------------------------------------------
-    # Download
-    # -----------------------------------------------------
-
     try:
 
+        print("===================================")
         print("Downloading:", url)
+        print("Format:", download_format)
+        print("Quality:", quality)
+        print("===================================")
 
         with yt_dlp.YoutubeDL(options) as ydl:
 
@@ -235,32 +226,55 @@ def download():
                 download=True
             )
 
-            filename = Path(
-                ydl.prepare_filename(info)
+        # -----------------------------
+        # FIND FINAL FILE
+        # -----------------------------
+
+        files = [
+            f for f in folder.iterdir()
+            if f.is_file()
+        ]
+
+        if not files:
+            return jsonify({
+                "error":
+                    "No downloadable media returned."
+            }), 404
+
+        if download_format == "mp3":
+
+            mp3_files = [
+                f for f in files
+                if f.suffix.lower() == ".mp3"
+            ]
+
+            filename = (
+                mp3_files[0]
+                if mp3_files
+                else files[0]
             )
 
-        # -------------------------------------------------
-        # Fallback filename
-        # -------------------------------------------------
+        else:
 
-        if not filename.exists():
+            mp4_files = [
+                f for f in files
+                if f.suffix.lower() == ".mp4"
+            ]
 
-            files = list(
-                folder.iterdir()
+            filename = (
+                mp4_files[0]
+                if mp4_files
+                else files[0]
             )
-
-            if not files:
-                return jsonify({
-                    "error":
-                        "No downloadable media returned."
-                }), 404
-
-            filename = files[0]
 
         print(
             "Download completed:",
             filename
         )
+
+        # -----------------------------
+        # SEND FILE
+        # -----------------------------
 
         return send_file(
             filename,
@@ -281,11 +295,6 @@ def download():
             "details":
                 str(e)[:2000]
         }), 400
-
-
-# ---------------------------------------------------------
-# Local development
-# ---------------------------------------------------------
 
 
 if __name__ == "__main__":
