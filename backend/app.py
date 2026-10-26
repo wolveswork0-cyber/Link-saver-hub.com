@@ -1,571 +1,367 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-import yt_dlp
+from pathlib import Path
+import subprocess
+import shutil
 import tempfile
 import uuid
-import os
-import subprocess
 import time
-from pathlib import Path
+import os
+import threading
+
+import yt_dlp
+
 
 app = Flask(__name__)
 CORS(app)
 
-BASE = Path(tempfile.gettempdir()) / "linkdrop_pro"
-BASE.mkdir(parents=True, exist_ok=True)
 
-# --------------------------------------------------
+# =========================================================
 # PATHS
-# --------------------------------------------------
+# =========================================================
 
 APP_DIR = Path(__file__).resolve().parent
 
-DENO_PATH = "/opt/render/.deno/bin/deno"
+DOWNLOAD_BASE = Path(tempfile.gettempdir()) / "linkdrop_pro"
+DOWNLOAD_BASE.mkdir(parents=True, exist_ok=True)
 
-BGUTIL_SERVER = str(
-    APP_DIR / "bgutil-ytdlp-pot-provider" / "server"
-)
+BGUTIL_SERVER = APP_DIR / "bgutil-ytdlp-pot-provider" / "server"
+BGUTIL_BUILD = BGUTIL_SERVER / "build" / "main.js"
 
-BGUTIL_NODE_MODULES = str(
-    Path(BGUTIL_SERVER) / "node_modules"
-)
-
-BGUTIL_PORT = "4416"
+BGUTIL_PORT = 4416
+BGUTIL_PROCESS = None
 
 
-# --------------------------------------------------
-# DENO PATH
-# --------------------------------------------------
-
-if os.path.exists(DENO_PATH):
-    os.environ["PATH"] = (
-        "/opt/render/.deno/bin:"
-        + os.environ.get("PATH", "")
-    )
-
-
-# --------------------------------------------------
-# BGUTIL PO TOKEN SERVER
-# --------------------------------------------------
-
-_bgutil_process = None
-
+# =========================================================
+# START BGUTIL PO TOKEN SERVER
+# =========================================================
 
 def start_bgutil():
-    global _bgutil_process
+    global BGUTIL_PROCESS
 
-    if _bgutil_process is not None:
+    print("Starting BGUTIL PO Token server...")
+
+    node_path = shutil.which("node")
+
+    if not node_path:
+        print("BGUTIL START ERROR: Node.js not found")
         return
 
-    if not os.path.isdir(BGUTIL_NODE_MODULES):
-        print("BGUTIL ERROR: node_modules folder not found")
-        print("Expected:", BGUTIL_NODE_MODULES)
-        return
-
-    if not os.path.isfile(
-        os.path.join(BGUTIL_SERVER, "src", "main.ts")
-    ):
-        print("BGUTIL ERROR: main.ts not found")
-        print(
-            "Expected:",
-            os.path.join(BGUTIL_SERVER, "src", "main.ts")
-        )
+    if not BGUTIL_BUILD.exists():
+        print(f"BGUTIL START ERROR: build/main.js not found: {BGUTIL_BUILD}")
         return
 
     try:
-
-        print("Starting BGUTIL PO Token server...")
-
-        _bgutil_process = subprocess.Popen(
+        BGUTIL_PROCESS = subprocess.Popen(
             [
-                DENO_PATH,
-                "run",
-                "--allow-env",
-                "--allow-net",
-                "--allow-ffi=.",
-                "--allow-read=.",
-                "../src/main.ts",
+                node_path,
+                str(BGUTIL_BUILD),
                 "--port",
-                BGUTIL_PORT,
+                str(BGUTIL_PORT),
                 "--host",
                 "127.0.0.1",
             ],
-            cwd=BGUTIL_NODE_MODULES,
+            cwd=str(BGUTIL_SERVER),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env=os.environ.copy(),
         )
-
-        time.sleep(5)
-
-        if _bgutil_process.poll() is None:
-
-            print(
-                "BGUTIL PO Token server started "
-                "on 127.0.0.1:4416"
-            )
-
-        else:
-
-            print("BGUTIL START FAILED")
-
-            if _bgutil_process.stdout:
-
-                try:
-                    output = _bgutil_process.stdout.read()
-                    print(output)
-                except Exception:
-                    pass
-
-    except Exception as e:
 
         print(
-            "BGUTIL START ERROR:",
-            repr(e)
+            f"BGUTIL PO Token server started "
+            f"(PID={BGUTIL_PROCESS.pid}, port={BGUTIL_PORT})"
         )
 
+        def read_output():
+            try:
+                for line in BGUTIL_PROCESS.stdout:
+                    print(f"[BGUTIL] {line.rstrip()}")
+            except Exception as e:
+                print(f"[BGUTIL OUTPUT ERROR] {e}")
 
+        threading.Thread(
+            target=read_output,
+            daemon=True
+        ).start()
+
+        time.sleep(2)
+
+        if BGUTIL_PROCESS.poll() is not None:
+            print(
+                f"BGUTIL PROCESS EXITED "
+                f"with code {BGUTIL_PROCESS.returncode}"
+            )
+        else:
+            print("BGUTIL PO Token server is running.")
+
+    except Exception as e:
+        print(f"BGUTIL START ERROR: {repr(e)}")
+
+
+# Start BGUTIL when Gunicorn worker loads this module
 start_bgutil()
 
 
-# --------------------------------------------------
+# =========================================================
 # HOME
-# --------------------------------------------------
+# =========================================================
 
-@app.get("/")
+@app.route("/", methods=["GET", "HEAD"])
 def home():
-
     return jsonify({
         "name": "LinkDrop PRO API",
         "status": "online"
     })
 
 
-# --------------------------------------------------
+# =========================================================
 # DOWNLOAD
-# --------------------------------------------------
+# =========================================================
 
-@app.post("/api/download")
+@app.route("/api/download", methods=["POST", "OPTIONS"])
 def download():
+
+    if request.method == "OPTIONS":
+        return "", 200
 
     data = request.get_json(silent=True) or {}
 
-    url = (
-        data.get("url") or ""
-    ).strip()
+    url = str(data.get("url", "")).strip()
+    fmt = str(data.get("format", "mp4")).lower().strip()
+    quality = str(data.get("quality", "best")).lower().strip()
 
-    download_format = (
-        data.get("format") or "mp4"
-    ).lower().strip()
-
-    quality = (
-        data.get("quality") or "best"
-    ).lower().strip()
-
-
-    # --------------------------------------------------
-    # URL VALIDATION
-    # --------------------------------------------------
-
-    if not url.startswith(
-        ("http://", "https://")
-    ):
-
+    if not url:
         return jsonify({
-            "error":
-                "Enter a valid http/https URL."
+            "error": "URL is required"
         }), 400
 
-
-    # --------------------------------------------------
-    # FORMAT VALIDATION
-    # --------------------------------------------------
-
-    allowed_formats = [
-        "mp3",
-        "mp4"
-    ]
-
-    if download_format not in allowed_formats:
-
+    if not url.startswith(("http://", "https://")):
         return jsonify({
-            "error":
-                "Invalid download format."
+            "error": "Invalid URL"
         }), 400
 
+    job_id = str(uuid.uuid4())
+    job_dir = DOWNLOAD_BASE / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
 
-    allowed_quality = [
-        "480",
-        "720",
-        "1080",
-        "best"
-    ]
+    output_template = str(job_dir / "%(title).120s.%(ext)s")
 
-    if quality not in allowed_quality:
+    # =====================================================
+    # FORMAT SELECTION
+    # =====================================================
 
-        quality = "best"
+    if fmt == "mp3":
 
-
-    # --------------------------------------------------
-    # TEMP FOLDER
-    # --------------------------------------------------
-
-    folder = (
-        BASE /
-        uuid.uuid4().hex
-    )
-
-    folder.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-
-    template = str(
-        folder /
-        "%(title).120s.%(ext)s"
-    )
-
-
-    # --------------------------------------------------
-    # MP3
-    # --------------------------------------------------
-
-    if download_format == "mp3":
-
-        format_selector = (
-            "bestaudio/best"
-        )
+        format_selector = "bestaudio/best"
 
         postprocessors = [
             {
-                "key":
-                    "FFmpegExtractAudio",
-
-                "preferredcodec":
-                    "mp3",
-
-                "preferredquality":
-                    "192",
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
             }
         ]
 
         merge_format = None
 
-
-    # --------------------------------------------------
-    # MP4
-    # --------------------------------------------------
-
     else:
 
         if quality == "480":
-
-            height = 480
+            format_selector = (
+                "bestvideo[height<=480]+bestaudio/"
+                "best[height<=480]/best"
+            )
 
         elif quality == "720":
-
-            height = 720
+            format_selector = (
+                "bestvideo[height<=720]+bestaudio/"
+                "best[height<=720]/best"
+            )
 
         elif quality == "1080":
-
-            height = 1080
-
-        else:
-
-            height = None
-
-
-        if height:
-
             format_selector = (
-                f"bestvideo[height<={height}]"
-                f"+bestaudio/"
-                f"best[height<={height}]"
+                "bestvideo[height<=1080]+bestaudio/"
+                "best[height<=1080]/best"
             )
 
         else:
-
             format_selector = (
-                "bestvideo*+bestaudio/best"
+                "bestvideo*+bestaudio/"
+                "best"
             )
-
 
         postprocessors = []
 
         merge_format = "mp4"
 
 
-    # --------------------------------------------------
+    # =====================================================
     # YT-DLP OPTIONS
-    # --------------------------------------------------
+    # =====================================================
 
-    options = {
+    ydl_opts = {
+        "outtmpl": output_template,
 
-        "outtmpl":
-            template,
+        "format": format_selector,
 
-        "noplaylist":
-            True,
+        "noplaylist": True,
 
-        "quiet":
-            False,
+        "quiet": False,
+        "no_warnings": False,
 
-        "no_warnings":
-            False,
+        "merge_output_format": merge_format,
 
-        "format":
-            format_selector,
+        "retries": 3,
+        "fragment_retries": 3,
 
-        "merge_output_format":
-            merge_format,
+        "socket_timeout": 60,
 
-        "postprocessors":
-            postprocessors,
+        "concurrent_fragment_downloads": 4,
 
-        # JavaScript runtime
-        "js_runtimes": {
+        "postprocessors": postprocessors,
 
-            "deno": {
-
-                "path":
-                    DENO_PATH
-            }
-        },
-
-        # EJS
-        "remote_components": [
-            "ejs:github"
-        ],
-
-        # YouTube
+        # BGUTIL PO Token provider
         "extractor_args": {
-
             "youtube": {
-
-                "player_client": [
-                    "mweb",
-                    "web_safari"
-                ]
+                "player_client": ["web"],
             },
-
             "youtubepot-bgutilhttp": {
-
-                "base_url":
-                    "http://127.0.0.1:4416"
-            }
+                "base_url": f"http://127.0.0.1:{BGUTIL_PORT}"
+            },
         },
 
-        "source_address":
-            "0.0.0.0",
-
-        "socket_timeout":
-            30,
-
-        "retries":
-            3,
-
-        "fragment_retries":
-            3,
-
-        "extractor_retries":
-            3,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/140.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        },
     }
 
 
-    # --------------------------------------------------
-    # OPTIONAL PROXY
-    # --------------------------------------------------
-
-    proxy = os.environ.get(
-        "YTDLP_PROXY",
-        ""
-    ).strip()
-
-    if proxy:
-
-        options["proxy"] = proxy
-
-
-    # --------------------------------------------------
+    # =====================================================
     # DOWNLOAD
-    # --------------------------------------------------
+    # =====================================================
 
     try:
 
-        print(
-            "==================================="
-        )
+        print("========================================")
+        print("DOWNLOAD REQUEST")
+        print(f"URL: {url}")
+        print(f"FORMAT: {fmt}")
+        print(f"QUALITY: {quality}")
+        print("========================================")
 
-        print(
-            "Downloading:",
-            url
-        )
-
-        print(
-            "Format:",
-            download_format
-        )
-
-        print(
-            "Quality:",
-            quality
-        )
-
-        print(
-            "==================================="
-        )
-
-
-        with yt_dlp.YoutubeDL(
-            options
-        ) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
             info = ydl.extract_info(
                 url,
                 download=True
             )
 
+            print("Download completed.")
 
-        # --------------------------------------------------
-        # FIND DOWNLOADED FILE
-        # --------------------------------------------------
+        # =================================================
+        # FIND OUTPUT FILE
+        # =================================================
 
         files = [
-            f
-            for f in folder.iterdir()
-            if f.is_file()
+            p for p in job_dir.iterdir()
+            if p.is_file()
         ]
 
-
         if not files:
+            raise RuntimeError(
+                "Download completed but output file was not found."
+            )
 
-            return jsonify({
-                "error":
-                    "No downloadable media returned."
-            }), 404
+        # Prefer requested format
+        if fmt == "mp3":
 
-
-        # --------------------------------------------------
-        # MP3 FILE
-        # --------------------------------------------------
-
-        if download_format == "mp3":
-
-            mp3_files = [
-                f
-                for f in files
-                if f.suffix.lower() == ".mp3"
+            preferred = [
+                p for p in files
+                if p.suffix.lower() == ".mp3"
             ]
-
-            if mp3_files:
-
-                filename = mp3_files[0]
-
-            else:
-
-                filename = files[0]
-
-
-        # --------------------------------------------------
-        # MP4 FILE
-        # --------------------------------------------------
 
         else:
 
-            mp4_files = [
-                f
-                for f in files
-                if f.suffix.lower() == ".mp4"
+            preferred = [
+                p for p in files
+                if p.suffix.lower() == ".mp4"
             ]
 
-            if mp4_files:
+        if preferred:
+            output_file = preferred[0]
+        else:
+            output_file = files[0]
 
-                filename = mp4_files[0]
+        print(f"OUTPUT FILE: {output_file}")
 
-            else:
-
-                filename = files[0]
-
-
-        # --------------------------------------------------
-        # FINAL CHECK
-        # --------------------------------------------------
-
-        if not filename.exists():
-
-            return jsonify({
-                "error":
-                    "Downloaded file was not found."
-            }), 404
-
-
-        print(
-            "Download completed:",
-            filename
-        )
-
-
-        print(
-            "File size:",
-            round(
-                filename.stat().st_size /
-                (1024 * 1024),
-                2
-            ),
-            "MB"
-        )
-
-
-        # --------------------------------------------------
+        # =================================================
         # SEND FILE
-        # --------------------------------------------------
+        # =================================================
 
-        return send_file(
+        download_name = output_file.name
 
-            filename,
-
+        response = send_file(
+            str(output_file),
             as_attachment=True,
-
-            download_name=
-                filename.name
+            download_name=download_name
         )
 
+        return response
 
     except Exception as e:
 
-        print(
-            "DOWNLOAD ERROR:",
-            repr(e)
-        )
+        print("DOWNLOAD ERROR:")
+        print(repr(e))
 
         return jsonify({
+            "error": "Download failed",
+            "details": str(e)
+        }), 500
 
-            "error":
-                "URL could not be downloaded.",
+    finally:
 
-            "details":
-                str(e)[:2000]
+        # Cleanup is intentionally delayed so send_file
+        # has enough time to read the file.
+        def cleanup():
 
-        }), 400
+            try:
+                time.sleep(300)
+
+                if job_dir.exists():
+                    shutil.rmtree(
+                        job_dir,
+                        ignore_errors=True
+                    )
+
+            except Exception:
+                pass
+
+        threading.Thread(
+            target=cleanup,
+            daemon=True
+        ).start()
 
 
-# --------------------------------------------------
-# LOCAL DEVELOPMENT
-# --------------------------------------------------
+# =========================================================
+# RUN
+# =========================================================
 
 if __name__ == "__main__":
 
-    app.run(
-
-        host="0.0.0.0",
-
-        port=int(
-            os.environ.get(
-                "PORT",
-                8080
-            )
+    port = int(
+        os.environ.get(
+            "PORT",
+            "10000"
         )
     )
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+                  )
