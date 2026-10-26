@@ -11,28 +11,30 @@ let history = JSON.parse(
 );
 
 
-// ===============================
+// =========================
 // HISTORY
-// ===============================
+// =========================
 
 function render() {
     if (!list) return;
 
     list.innerHTML = history.length
-        ? history.map((u, i) => `
+        ? history.map((url, index) => `
             <div class="item">
-                <a href="${u}" target="_blank" rel="noopener">
-                    ${u}
+                <a href="${url}" target="_blank" rel="noopener">
+                    ${url}
                 </a>
-                <button onclick="removeItem(${i})">×</button>
+                <button type="button" onclick="removeItem(${index})">
+                    ×
+                </button>
             </div>
         `).join("")
         : '<p class="empty">No downloads yet.</p>';
 }
 
 
-function removeItem(i) {
-    history.splice(i, 1);
+function removeItem(index) {
+    history.splice(index, 1);
 
     localStorage.setItem(
         "linkdrop-history",
@@ -46,19 +48,20 @@ function removeItem(i) {
 const clearButton = document.querySelector("#clear");
 
 if (clearButton) {
-    clearButton.onclick = () => {
+    clearButton.addEventListener("click", () => {
+
         history = [];
 
         localStorage.removeItem("linkdrop-history");
 
         render();
-    };
+    });
 }
 
 
-// ===============================
-// CREATE DOWNLOAD OPTIONS
-// ===============================
+// =========================
+// DOWNLOAD OPTIONS
+// =========================
 
 function showOptions() {
 
@@ -69,49 +72,72 @@ function showOptions() {
         oldBox.remove();
     }
 
+
     const box = document.createElement("div");
 
     box.id = "download-options";
+
 
     box.innerHTML = `
         <div class="download-options-inner">
 
             <h3>Select Download Format</h3>
 
-            <button type="button" data-format="mp4" data-quality="480">
+            <button
+                type="button"
+                data-format="mp4"
+                data-quality="480">
                 MP4 — 480p
             </button>
 
-            <button type="button" data-format="mp4" data-quality="720">
+            <button
+                type="button"
+                data-format="mp4"
+                data-quality="720">
                 MP4 — 720p
             </button>
 
-            <button type="button" data-format="mp4" data-quality="1080">
+            <button
+                type="button"
+                data-format="mp4"
+                data-quality="1080">
                 MP4 — 1080p
             </button>
 
-            <button type="button" data-format="mp4" data-quality="best">
+            <button
+                type="button"
+                data-format="mp4"
+                data-quality="best">
                 MP4 — Best Quality
             </button>
 
-            <button type="button" data-format="mp3" data-quality="audio">
+            <button
+                type="button"
+                data-format="mp3"
+                data-quality="audio">
                 MP3 — Audio
             </button>
 
-            <button type="button" id="cancel-download">
+            <button
+                type="button"
+                id="cancel-download">
                 Cancel
             </button>
 
         </div>
     `;
 
-    form.parentNode.insertBefore(box, form.nextSibling);
+
+    // Put options below the form
+    if (form && form.parentNode) {
+        form.parentNode.insertBefore(
+            box,
+            form.nextSibling
+        );
+    }
 
 
-    // ===============================
-    // OPTION BUTTONS
-    // ===============================
-
+    // Option buttons
     box.querySelectorAll(
         "button[data-format]"
     ).forEach(button => {
@@ -128,34 +154,39 @@ function showOptions() {
                 format,
                 quality
             );
+
         });
+
     });
 
 
-    // ===============================
-    // CANCEL
-    // ===============================
+    // Cancel
+    const cancelButton =
+        box.querySelector("#cancel-download");
 
-    const cancel = box.querySelector(
-        "#cancel-download"
-    );
+    if (cancelButton) {
 
-    if (cancel) {
-        cancel.addEventListener("click", () => {
-            box.remove();
+        cancelButton.addEventListener(
+            "click",
+            () => {
 
-            if (msg) {
-                msg.textContent =
-                    "Download cancelled.";
+                box.remove();
+
+                if (msg) {
+                    msg.textContent =
+                        "Download cancelled.";
+                }
+
             }
-        });
+        );
+
     }
 }
 
 
-// ===============================
+// =========================
 // START DOWNLOAD
-// ===============================
+// =========================
 
 async function startDownload(
     url,
@@ -164,6 +195,7 @@ async function startDownload(
 ) {
 
     if (!url) {
+
         if (msg) {
             msg.textContent =
                 "Please enter a valid video URL.";
@@ -184,9 +216,12 @@ async function startDownload(
             'button[type="submit"]'
         );
 
+
     let oldButtonText = "";
 
+
     if (submitButton) {
+
         oldButtonText =
             submitButton.innerText;
 
@@ -199,23 +234,24 @@ async function startDownload(
 
     try {
 
-        const response = await fetch(
-            API_URL,
-            {
-                method: "POST",
+        const response =
+            await fetch(
+                API_URL,
+                {
+                    method: "POST",
 
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-                body: JSON.stringify({
-                    url: url,
-                    format: format,
-                    quality: quality
-                })
-            }
-        );
+                    body: JSON.stringify({
+                        url: url,
+                        format: format,
+                        quality: quality
+                    })
+                }
+            );
 
 
         if (!response.ok) {
@@ -223,16 +259,20 @@ async function startDownload(
             let errorText =
                 "Download failed.";
 
+
             try {
 
                 const errorData =
                     await response.json();
 
+
                 if (errorData.details) {
+
                     errorText =
                         errorData.details;
-                }
-                else if (errorData.error) {
+
+                } else if (errorData.error) {
+
                     errorText =
                         errorData.error;
                 }
@@ -240,6 +280,7 @@ async function startDownload(
             } catch (e) {
                 // Ignore JSON error
             }
+
 
             throw new Error(errorText);
         }
@@ -249,8 +290,7 @@ async function startDownload(
             await response.blob();
 
 
-        if (!blob ||
-            blob.size === 0) {
+        if (!blob || blob.size === 0) {
 
             throw new Error(
                 "Empty file received."
@@ -258,11 +298,12 @@ async function startDownload(
         }
 
 
-        // ===============================
+        // =========================
         // FILE NAME
-        // ===============================
+        // =========================
 
         let filename = "";
+
 
         const disposition =
             response.headers.get(
@@ -277,19 +318,28 @@ async function startDownload(
                     /filename\*=UTF-8''([^;]+)/i
                 );
 
+
             if (utfMatch) {
 
-                filename =
-                    decodeURIComponent(
-                        utfMatch[1]
-                    );
+                try {
+
+                    filename =
+                        decodeURIComponent(
+                            utfMatch[1]
+                        );
+
+                } catch (e) {}
+
             }
-            else {
+
+
+            if (!filename) {
 
                 const normalMatch =
                     disposition.match(
                         /filename="?([^"]+)"?/i
                     );
+
 
                 if (normalMatch) {
 
@@ -301,7 +351,6 @@ async function startDownload(
 
 
         // Fallback filename
-
         if (!filename) {
 
             if (format === "mp3") {
@@ -309,26 +358,22 @@ async function startDownload(
                 filename =
                     "LinkDrop-Audio.mp3";
 
-            }
-            else if (quality === "480") {
+            } else if (quality === "480") {
 
                 filename =
                     "LinkDrop-480p.mp4";
 
-            }
-            else if (quality === "720") {
+            } else if (quality === "720") {
 
                 filename =
                     "LinkDrop-720p.mp4";
 
-            }
-            else if (quality === "1080") {
+            } else if (quality === "1080") {
 
                 filename =
                     "LinkDrop-1080p.mp4";
 
-            }
-            else {
+            } else {
 
                 filename =
                     "LinkDrop-Best-Quality.mp4";
@@ -336,19 +381,24 @@ async function startDownload(
         }
 
 
-        // ===============================
-        // BROWSER DOWNLOAD
-        // ===============================
+        // =========================
+        // DOWNLOAD FILE
+        // =========================
 
         const downloadURL =
             URL.createObjectURL(blob);
 
+
         const link =
             document.createElement("a");
 
-        link.href = downloadURL;
 
-        link.download = filename;
+        link.href =
+            downloadURL;
+
+        link.download =
+            filename;
+
 
         document.body.appendChild(link);
 
@@ -366,14 +416,14 @@ async function startDownload(
         }, 10000);
 
 
-        // ===============================
-        // HISTORY
-        // ===============================
+        // =========================
+        // SAVE HISTORY
+        // =========================
 
         history = [
             url,
             ...history.filter(
-                x => x !== url
+                item => item !== url
             )
         ].slice(0, 10);
 
@@ -418,6 +468,7 @@ async function startDownload(
             error.message
         );
 
+
     } finally {
 
         if (submitButton) {
@@ -425,89 +476,102 @@ async function startDownload(
             submitButton.disabled = false;
 
             submitButton.innerText =
-                oldButtonText ||
-                "Download";
+                oldButtonText || "Download";
         }
     }
 }
 
 
-// ===============================
+// =========================
 // FORM SUBMIT
-// ===============================
+// =========================
 
 if (form) {
 
-    form.onsubmit = (e) => {
+    form.addEventListener(
+        "submit",
+        (event) => {
 
-        e.preventDefault();
-
-        const url =
-            input.value.trim();
+            event.preventDefault();
 
 
-        if (!url) {
+            const url =
+                input.value.trim();
 
-            if (msg) {
-                msg.textContent =
-                    "Please paste a video URL.";
+
+            if (!url) {
+
+                if (msg) {
+
+                    msg.textContent =
+                        "Please paste a video URL.";
+                }
+
+                return;
             }
 
-            return;
+
+            try {
+
+                const parsed =
+                    new URL(url);
+
+
+                if (
+                    parsed.protocol !== "http:" &&
+                    parsed.protocol !== "https:"
+                ) {
+
+                    throw new Error(
+                        "Invalid URL"
+                    );
+                }
+
+
+                // SHOW OPTIONS FIRST
+                showOptions();
+
+
+                if (msg) {
+
+                    msg.textContent =
+                        "Choose your download format.";
+                }
+
+
+            } catch (error) {
+
+                if (msg) {
+
+                    msg.textContent =
+                        "Please enter a valid HTTP/HTTPS link.";
+                }
+            }
         }
-
-
-        try {
-
-            const parsed =
-                new URL(url);
-
-
-            if (
-                parsed.protocol !==
-                    "http:" &&
-                parsed.protocol !==
-                    "https:"
-            ) {
-
-                throw new Error(
-                    "Invalid URL"
-                );
-            }
-
-
-            // Show format/quality options
-            showOptions();
-
-        } catch (error) {
-
-            if (msg) {
-
-                msg.textContent =
-                    "Please enter a valid HTTP/HTTPS link.";
-            }
-        }
-    };
+    );
 }
 
 
-// ===============================
+// =========================
 // DARK MODE
-// ===============================
+// =========================
 
 if (theme) {
 
-    theme.onclick = () => {
+    theme.addEventListener(
+        "click",
+        () => {
 
-        document.body.classList.toggle(
-            "dark"
-        );
-    };
+            document.body.classList.toggle(
+                "dark"
+            );
+        }
+    );
 }
 
 
-// ===============================
-// INITIALIZE
-// ===============================
+// =========================
+// INITIAL LOAD
+// =========================
 
 render();
