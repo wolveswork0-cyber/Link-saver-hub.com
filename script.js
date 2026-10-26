@@ -4,7 +4,9 @@ const msg = document.querySelector("#msg");
 const list = document.querySelector("#list");
 const theme = document.querySelector("#theme");
 
-const API_URL = "https://linkdrop-pro-3clf.onrender.com/api/download";
+const API_BASE = "https://linkdrop-pro-3clf.onrender.com";
+const API_DOWNLOAD = `${API_BASE}/api/download`;
+const API_INFO = `${API_BASE}/api/info`;
 
 let history = JSON.parse(
     localStorage.getItem("linkdrop-history") || "[]"
@@ -16,6 +18,7 @@ let history = JSON.parse(
 // =========================
 
 function render() {
+
     if (!list) return;
 
     list.innerHTML = history.length
@@ -24,16 +27,21 @@ function render() {
                 <a href="${url}" target="_blank" rel="noopener">
                     ${url}
                 </a>
-                <button type="button" onclick="removeItem(${index})">
+
+                <button
+                    type="button"
+                    onclick="removeItem(${index})">
                     ×
                 </button>
             </div>
         `).join("")
+
         : '<p class="empty">No downloads yet.</p>';
 }
 
 
 function removeItem(index) {
+
     history.splice(index, 1);
 
     localStorage.setItem(
@@ -45,17 +53,92 @@ function removeItem(index) {
 }
 
 
-const clearButton = document.querySelector("#clear");
+const clearButton =
+    document.querySelector("#clear");
 
 if (clearButton) {
-    clearButton.addEventListener("click", () => {
 
-        history = [];
+    clearButton.addEventListener(
+        "click",
+        () => {
 
-        localStorage.removeItem("linkdrop-history");
+            history = [];
 
-        render();
-    });
+            localStorage.removeItem(
+                "linkdrop-history"
+            );
+
+            render();
+        }
+    );
+}
+
+
+// =========================
+// SIZE DISPLAY
+// =========================
+
+function displaySize(sizeObject) {
+
+    if (!sizeObject) {
+        return "Size unavailable";
+    }
+
+    if (!sizeObject.display) {
+        return "Size unavailable";
+    }
+
+    if (sizeObject.approx) {
+        return `~${sizeObject.display}`;
+    }
+
+    return sizeObject.display;
+}
+
+
+// =========================
+// GET VIDEO INFORMATION
+// =========================
+
+async function getVideoInfo(url) {
+
+    const response = await fetch(
+        API_INFO,
+        {
+            method: "POST",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                url: url
+            })
+        }
+    );
+
+    if (!response.ok) {
+
+        let errorMessage =
+            "Could not read video information.";
+
+        try {
+
+            const data =
+                await response.json();
+
+            if (data.details) {
+                errorMessage = data.details;
+            } else if (data.error) {
+                errorMessage = data.error;
+            }
+
+        } catch (e) {}
+
+        throw new Error(errorMessage);
+    }
+
+    return await response.json();
 }
 
 
@@ -63,73 +146,240 @@ if (clearButton) {
 // DOWNLOAD OPTIONS
 // =========================
 
-function showOptions() {
+async function showOptions(url) {
 
-    // Remove old options if already present
-    const oldBox = document.querySelector("#download-options");
+    const oldBox =
+        document.querySelector(
+            "#download-options"
+        );
 
     if (oldBox) {
         oldBox.remove();
     }
 
 
-    const box = document.createElement("div");
+    if (msg) {
+        msg.textContent =
+            "Checking available formats...";
+    }
 
-    box.id = "download-options";
+
+    let videoInfo;
+
+    try {
+
+        videoInfo =
+            await getVideoInfo(url);
+
+    } catch (error) {
+
+        console.error(
+            "Info error:",
+            error
+        );
+
+        if (msg) {
+
+            msg.textContent =
+                "Could not check video formats. Please try again.";
+        }
+
+        return;
+    }
+
+
+    const sizes =
+        videoInfo.sizes || {};
+
+
+    const box =
+        document.createElement("div");
+
+    box.id =
+        "download-options";
 
 
     box.innerHTML = `
         <div class="download-options-inner">
 
-            <h3>Select Download Format</h3>
+            <div class="options-header">
+
+                <div class="options-icon">
+                    ↓
+                </div>
+
+                <div>
+                    <h3>
+                        Select Download Format
+                    </h3>
+
+                    <p>
+                        Choose quality for your download
+                    </p>
+                </div>
+
+            </div>
+
+
+            <div class="download-option-list">
+
+                <button
+                    type="button"
+                    class="download-option option-blue"
+                    data-format="mp4"
+                    data-quality="480">
+
+                    <span class="option-icon">
+                        ▶
+                    </span>
+
+                    <span class="option-text">
+                        <strong>MP4 — 480p</strong>
+                        <small>Standard quality</small>
+                    </span>
+
+                    <span class="option-size">
+                        ${displaySize(sizes["480"])}
+                    </span>
+
+                    <span class="option-arrow">
+                        ›
+                    </span>
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="download-option option-purple"
+                    data-format="mp4"
+                    data-quality="720">
+
+                    <span class="option-icon">
+                        ▶
+                    </span>
+
+                    <span class="option-text">
+                        <strong>MP4 — 720p</strong>
+                        <small>HD quality</small>
+                    </span>
+
+                    <span class="option-size">
+                        ${displaySize(sizes["720"])}
+                    </span>
+
+                    <span class="option-arrow">
+                        ›
+                    </span>
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="download-option option-green"
+                    data-format="mp4"
+                    data-quality="1080">
+
+                    <span class="option-icon">
+                        ▶
+                    </span>
+
+                    <span class="option-text">
+                        <strong>MP4 — 1080p</strong>
+                        <small>Full HD quality</small>
+                    </span>
+
+                    <span class="option-size">
+                        ${displaySize(sizes["1080"])}
+                    </span>
+
+                    <span class="option-arrow">
+                        ›
+                    </span>
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="download-option option-gold"
+                    data-format="mp4"
+                    data-quality="best">
+
+                    <span class="option-icon">
+                        ★
+                    </span>
+
+                    <span class="option-text">
+                        <strong>MP4 — Best Quality</strong>
+                        <small>Highest available quality</small>
+                    </span>
+
+                    <span class="option-size">
+                        ${displaySize(sizes["best"])}
+                    </span>
+
+                    <span class="option-arrow">
+                        ›
+                    </span>
+
+                </button>
+
+
+                <button
+                    type="button"
+                    class="download-option option-pink"
+                    data-format="mp3"
+                    data-quality="audio">
+
+                    <span class="option-icon">
+                        ♪
+                    </span>
+
+                    <span class="option-text">
+                        <strong>MP3 — Audio</strong>
+                        <small>192 kbps MP3</small>
+                    </span>
+
+                    <span class="option-size">
+                        ${
+                            sizes.mp3 &&
+                            sizes.mp3.source
+                                ? displaySize(
+                                    sizes.mp3.source
+                                )
+                                : "Size unavailable"
+                        }
+                    </span>
+
+                    <span class="option-arrow">
+                        ›
+                    </span>
+
+                </button>
+
+            </div>
+
 
             <button
                 type="button"
-                data-format="mp4"
-                data-quality="480">
-                MP4 — 480p
-            </button>
+                id="cancel-download"
+                class="cancel-download">
 
-            <button
-                type="button"
-                data-format="mp4"
-                data-quality="720">
-                MP4 — 720p
-            </button>
-
-            <button
-                type="button"
-                data-format="mp4"
-                data-quality="1080">
-                MP4 — 1080p
-            </button>
-
-            <button
-                type="button"
-                data-format="mp4"
-                data-quality="best">
-                MP4 — Best Quality
-            </button>
-
-            <button
-                type="button"
-                data-format="mp3"
-                data-quality="audio">
-                MP3 — Audio
-            </button>
-
-            <button
-                type="button"
-                id="cancel-download">
                 Cancel
+
             </button>
 
         </div>
     `;
 
 
-    // Put options below the form
-    if (form && form.parentNode) {
+    if (
+        form &&
+        form.parentNode
+    ) {
+
         form.parentNode.insertBefore(
             box,
             form.nextSibling
@@ -137,32 +387,44 @@ function showOptions() {
     }
 
 
-    // Option buttons
+    // =========================
+    // OPTION BUTTONS
+    // =========================
+
     box.querySelectorAll(
         "button[data-format]"
     ).forEach(button => {
 
-        button.addEventListener("click", () => {
+        button.addEventListener(
+            "click",
+            () => {
 
-            const format = button.dataset.format;
-            const quality = button.dataset.quality;
+                const format =
+                    button.dataset.format;
 
-            box.remove();
+                const quality =
+                    button.dataset.quality;
 
-            startDownload(
-                input.value.trim(),
-                format,
-                quality
-            );
+                box.remove();
 
-        });
-
+                startDownload(
+                    url,
+                    format,
+                    quality
+                );
+            }
+        );
     });
 
 
-    // Cancel
+    // =========================
+    // CANCEL
+    // =========================
+
     const cancelButton =
-        box.querySelector("#cancel-download");
+        box.querySelector(
+            "#cancel-download"
+        );
 
     if (cancelButton) {
 
@@ -173,13 +435,19 @@ function showOptions() {
                 box.remove();
 
                 if (msg) {
+
                     msg.textContent =
                         "Download cancelled.";
                 }
-
             }
         );
+    }
 
+
+    if (msg) {
+
+        msg.textContent =
+            "Choose your download format.";
     }
 }
 
@@ -197,6 +465,7 @@ async function startDownload(
     if (!url) {
 
         if (msg) {
+
             msg.textContent =
                 "Please enter a valid video URL.";
         }
@@ -206,15 +475,18 @@ async function startDownload(
 
 
     if (msg) {
+
         msg.textContent =
             "Preparing your download...";
     }
 
 
     const submitButton =
-        form.querySelector(
-            'button[type="submit"]'
-        );
+        form
+            ? form.querySelector(
+                'button[type="submit"]'
+            )
+            : null;
 
 
     let oldButtonText = "";
@@ -225,7 +497,8 @@ async function startDownload(
         oldButtonText =
             submitButton.innerText;
 
-        submitButton.disabled = true;
+        submitButton.disabled =
+            true;
 
         submitButton.innerText =
             "Downloading...";
@@ -236,7 +509,7 @@ async function startDownload(
 
         const response =
             await fetch(
-                API_URL,
+                API_DOWNLOAD,
                 {
                     method: "POST",
 
@@ -259,12 +532,10 @@ async function startDownload(
             let errorText =
                 "Download failed.";
 
-
             try {
 
                 const errorData =
                     await response.json();
-
 
                 if (errorData.details) {
 
@@ -277,12 +548,12 @@ async function startDownload(
                         errorData.error;
                 }
 
-            } catch (e) {
-                // Ignore JSON error
-            }
+            } catch (e) {}
 
 
-            throw new Error(errorText);
+            throw new Error(
+                errorText
+            );
         }
 
 
@@ -290,7 +561,10 @@ async function startDownload(
             await response.blob();
 
 
-        if (!blob || blob.size === 0) {
+        if (
+            !blob ||
+            blob.size === 0
+        ) {
 
             throw new Error(
                 "Empty file received."
@@ -303,7 +577,6 @@ async function startDownload(
         // =========================
 
         let filename = "";
-
 
         const disposition =
             response.headers.get(
@@ -329,7 +602,6 @@ async function startDownload(
                         );
 
                 } catch (e) {}
-
             }
 
 
@@ -350,7 +622,7 @@ async function startDownload(
         }
 
 
-        // Fallback filename
+        // Fallback
         if (!filename) {
 
             if (format === "mp3") {
@@ -358,17 +630,23 @@ async function startDownload(
                 filename =
                     "LinkDrop-Audio.mp3";
 
-            } else if (quality === "480") {
+            } else if (
+                quality === "480"
+            ) {
 
                 filename =
                     "LinkDrop-480p.mp4";
 
-            } else if (quality === "720") {
+            } else if (
+                quality === "720"
+            ) {
 
                 filename =
                     "LinkDrop-720p.mp4";
 
-            } else if (quality === "1080") {
+            } else if (
+                quality === "1080"
+            ) {
 
                 filename =
                     "LinkDrop-1080p.mp4";
@@ -386,7 +664,9 @@ async function startDownload(
         // =========================
 
         const downloadURL =
-            URL.createObjectURL(blob);
+            URL.createObjectURL(
+                blob
+            );
 
 
         const link =
@@ -400,20 +680,25 @@ async function startDownload(
             filename;
 
 
-        document.body.appendChild(link);
+        document.body.appendChild(
+            link
+        );
 
         link.click();
 
         link.remove();
 
 
-        setTimeout(() => {
+        setTimeout(
+            () => {
 
-            URL.revokeObjectURL(
-                downloadURL
-            );
+                URL.revokeObjectURL(
+                    downloadURL
+                );
 
-        }, 10000);
+            },
+            10000
+        );
 
 
         // =========================
@@ -473,10 +758,12 @@ async function startDownload(
 
         if (submitButton) {
 
-            submitButton.disabled = false;
+            submitButton.disabled =
+                false;
 
             submitButton.innerText =
-                oldButtonText || "Download";
+                oldButtonText ||
+                "Download";
         }
     }
 }
@@ -490,7 +777,7 @@ if (form) {
 
     form.addEventListener(
         "submit",
-        (event) => {
+        async (event) => {
 
             event.preventDefault();
 
@@ -528,15 +815,10 @@ if (form) {
                 }
 
 
-                // SHOW OPTIONS FIRST
-                showOptions();
-
-
-                if (msg) {
-
-                    msg.textContent =
-                        "Choose your download format.";
-                }
+                // Show format options
+                await showOptions(
+                    url
+                );
 
 
             } catch (error) {
