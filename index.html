@@ -46,7 +46,6 @@ Snapchat or other supported URL.
 
 </section>
 
-
 <section class="features">
 
 <div>
@@ -66,7 +65,6 @@ Snapchat or other supported URL.
 
 </section>
 
-
 <section class="history">
 
 <div class="sectionHead">
@@ -79,7 +77,6 @@ Snapchat or other supported URL.
 </div>
 
 </section>
-
 
 <section class="notice">
 
@@ -101,152 +98,7 @@ content may not be downloadable.
 © 2026 LinkDrop Pro
 </footer>
 
-
-<script>
-
-const API_URL = "https://linkdrop-pro-3clf.onrender.com";
-
-const form = document.getElementById("form");
-const input = document.getElementById("url");
-const msg = document.getElementById("msg");
-const button = document.getElementById("downloadBtn");
-const list = document.getElementById("list");
-const clearBtn = document.getElementById("clear");
-const themeBtn = document.getElementById("theme");
-
-
-function showMessage(text, type = "") {
-
-  msg.textContent = text;
-  msg.className = type;
-
-}
-
-
-function addHistory(url) {
-
-  const item = document.createElement("p");
-
-  item.textContent = url;
-
-  list.prepend(item);
-
-}
-
-
-form.addEventListener("submit", async function(event) {
-
-  event.preventDefault();
-
-  const url = input.value.trim();
-
-  if (!url) {
-    showMessage("Please enter a URL.", "error");
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = "Processing...";
-  showMessage("Downloading... please wait.", "loading");
-
-  try {
-
-    const response = await fetch(API_URL + "/api/download", {
-
-      method: "POST",
-
-      headers: {
-        "Content-Type": "application/json"
-      },
-
-      body: JSON.stringify({
-        url: url
-      })
-
-    });
-
-
-    if (!response.ok) {
-
-      let errorText = "Download failed.";
-
-      try {
-
-        const errorData = await response.json();
-
-        if (errorData.details) {
-          errorText = errorData.details;
-        } else if (errorData.error) {
-          errorText = errorData.error;
-        }
-
-      } catch (e) {}
-
-      throw new Error(errorText);
-
-    }
-
-
-    const blob = await response.blob();
-
-    const downloadUrl = window.URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-
-    a.href = downloadUrl;
-
-    a.download = "LinkDrop-Download";
-
-    document.body.appendChild(a);
-
-    a.click();
-
-    a.remove();
-
-    window.URL.revokeObjectURL(downloadUrl);
-
-
-    showMessage("Download started successfully.", "success");
-
-    addHistory(url);
-
-    input.value = "";
-
-  } catch (error) {
-
-    console.error(error);
-
-    showMessage(
-      "Download failed: " + error.message,
-      "error"
-    );
-
-  } finally {
-
-    button.disabled = false;
-    button.textContent = "Download";
-
-  }
-
-});
-
-
-clearBtn.addEventListener("click", function() {
-
-  list.innerHTML =
-    '<p class="empty">No downloads yet.</p>';
-
-});
-
-
-themeBtn.addEventListener("click", function() {
-
-  document.body.classList.toggle("dark");
-
-});
-
-
-</script>
+<script src="script.js"></script>
 
 </body>
 </html>
