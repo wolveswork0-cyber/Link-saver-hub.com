@@ -1,1 +1,695 @@
-*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#101828;transition:.2s}header{height:70px;background:#fff;border-bottom:1px solid #eaecf0;display:flex;align-items:center;justify-content:space-between;padding:0 6%;position:sticky;top:0}.brand{font-size:21px;font-weight:800}.brand span{display:inline-grid;place-items:center;background:#111;color:#fff;width:35px;height:35px;border-radius:10px;margin-right:8px}.brand b{font-size:10px;background:#eee;padding:4px 6px;border-radius:5px;margin-left:5px}header button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;width:40px;height:40px;font-size:18px}main{max-width:980px;margin:auto;padding:60px 20px}.hero{text-align:center;padding:45px 10px}.badge{font-size:12px;font-weight:800;letter-spacing:1.5px;color:#667085}.hero h1{font-size:clamp(40px,7vw,70px);line-height:1;margin:15px 0}.hero>p:not(.badge){color:#667085;font-size:18px}.hero form{display:flex;max-width:760px;margin:35px auto 0;gap:10px;background:#fff;padding:8px;border:1px solid #d0d5dd;border-radius:16px;box-shadow:0 10px 30px #10182812}.hero input{flex:1;border:0;outline:0;padding:15px;font-size:16px;min-width:0}.hero form button{border:0;background:#111;color:#fff;border-radius:11px;padding:0 25px;font-weight:700}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.features div,.history,.notice{background:#fff;border:1px solid #eaecf0;border-radius:16px;padding:22px}.features strong,.features span{display:block}.features span{color:#667085;font-size:14px;margin-top:8px;line-height:1.5}.history{margin-top:15px}.sectionHead{display:flex;justify-content:space-between;align-items:center}.sectionHead h2{margin:0}.sectionHead button{border:0;background:none;color:#667085}.item{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-bottom:1px solid #eee}.item a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}.empty{color:#98a2b3}.notice{margin-top:15px;color:#667085;font-size:13px;line-height:1.7}footer{text-align:center;color:#98a2b3;padding:30px}#msg{margin-top:15px;font-size:14px;color:#667085}.dark{background:#101828;color:#f2f4f7}.dark header,.dark .features div,.dark .history,.dark .notice,.dark .hero form{background:#182230;border-color:#344054}.dark header button{background:#182230;color:#fff;border-color:#475467}.dark .hero input{background:transparent;color:#fff}.dark .hero p,.dark .features span,.dark .notice{color:#98a2b3}@media(max-width:650px){.features{grid-template-columns:1fr}.hero form{flex-direction:column}.hero form button{height:50px}.hero{padding-top:25px}}
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Inter, Arial, sans-serif;
+    background: #f5f7fb;
+    color: #101828;
+    transition: .2s;
+}
+
+
+/* =========================
+   HEADER
+========================= */
+
+header {
+    height: 70px;
+    background: #fff;
+    border-bottom: 1px solid #eaecf0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 6%;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.brand {
+    font-size: 21px;
+    font-weight: 800;
+}
+
+.brand span {
+    display: inline-grid;
+    place-items: center;
+    background: #111;
+    color: #fff;
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+    margin-right: 8px;
+}
+
+.brand b {
+    font-size: 10px;
+    background: #eee;
+    padding: 4px 6px;
+    border-radius: 5px;
+    margin-left: 5px;
+}
+
+header button {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    border-radius: 10px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+
+/* =========================
+   MAIN
+========================= */
+
+main {
+    max-width: 980px;
+    margin: auto;
+    padding: 60px 20px;
+}
+
+
+/* =========================
+   HERO
+========================= */
+
+.hero {
+    text-align: center;
+    padding: 45px 10px;
+}
+
+.badge {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: #667085;
+}
+
+.hero h1 {
+    font-size: clamp(40px, 7vw, 70px);
+    line-height: 1;
+    margin: 15px 0;
+}
+
+.hero > p:not(.badge) {
+    color: #667085;
+    font-size: 18px;
+}
+
+.hero form {
+    display: flex;
+    max-width: 760px;
+    margin: 35px auto 0;
+    gap: 10px;
+    background: #fff;
+    padding: 8px;
+    border: 1px solid #d0d5dd;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px #10182812;
+}
+
+.hero input {
+    flex: 1;
+    border: 0;
+    outline: 0;
+    padding: 15px;
+    font-size: 16px;
+    min-width: 0;
+}
+
+.hero form button {
+    border: 0;
+    background: #111;
+    color: #fff;
+    border-radius: 11px;
+    padding: 0 25px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: .2s;
+}
+
+.hero form button:hover {
+    transform: translateY(-1px);
+}
+
+
+/* =========================
+   DOWNLOAD OPTIONS
+========================= */
+
+#download-options {
+    max-width: 760px;
+    margin: 22px auto 0;
+    animation: optionsIn .25s ease;
+}
+
+@keyframes optionsIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.download-options-inner {
+    background: #fff;
+    border: 1px solid #e4e7ec;
+    border-radius: 22px;
+    padding: 22px;
+    box-shadow: 0 15px 40px rgba(16, 24, 40, .08);
+}
+
+
+/* =========================
+   OPTIONS HEADER
+========================= */
+
+.options-header {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    text-align: left;
+    margin-bottom: 18px;
+}
+
+.options-icon {
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    background: #eef4ff;
+    color: #3b82f6;
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.options-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #101828;
+}
+
+.options-header p {
+    margin: 4px 0 0;
+    color: #667085;
+    font-size: 13px;
+}
+
+
+/* =========================
+   OPTION LIST
+========================= */
+
+.download-option-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+
+/* =========================
+   OPTION CARD
+========================= */
+
+.download-option {
+    width: 100%;
+    min-height: 70px;
+
+    display: flex;
+    align-items: center;
+
+    gap: 13px;
+
+    border: 1px solid transparent;
+    border-radius: 15px;
+
+    padding: 11px 13px;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    transition:
+        transform .18s ease,
+        box-shadow .18s ease,
+        border-color .18s ease;
+
+    font-family: inherit;
+}
+
+.download-option:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 7px 18px rgba(16, 24, 40, .08);
+}
+
+.download-option:active {
+    transform: translateY(0);
+}
+
+
+/* =========================
+   OPTION ICON
+========================= */
+
+.option-icon {
+    width: 43px;
+    height: 43px;
+
+    flex-shrink: 0;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 12px;
+
+    font-size: 17px;
+    font-weight: 800;
+}
+
+
+/* =========================
+   OPTION TEXT
+========================= */
+
+.option-text {
+    flex: 1;
+    min-width: 0;
+
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.option-text strong {
+    font-size: 14px;
+    color: #101828;
+}
+
+.option-text small {
+    font-size: 12px;
+    color: #667085;
+}
+
+
+/* =========================
+   SIZE
+========================= */
+
+.option-size {
+    flex-shrink: 0;
+
+    background: rgba(255, 255, 255, .75);
+
+    border: 1px solid rgba(16, 24, 40, .08);
+
+    border-radius: 8px;
+
+    padding: 6px 9px;
+
+    font-size: 11px;
+    font-weight: 700;
+
+    color: #344054;
+
+    white-space: nowrap;
+}
+
+
+/* =========================
+   ARROW
+========================= */
+
+.option-arrow {
+    flex-shrink: 0;
+
+    font-size: 25px;
+    line-height: 1;
+
+    color: #667085;
+
+    margin-left: 2px;
+}
+
+
+/* =========================
+   OPTION COLORS
+========================= */
+
+.option-blue {
+    background: #eef6ff;
+    border-color: #d9ebff;
+}
+
+.option-blue .option-icon {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+
+.option-purple {
+    background: #f4efff;
+    border-color: #e8ddff;
+}
+
+.option-purple .option-icon {
+    background: #e9ddff;
+    color: #7c3aed;
+}
+
+
+.option-green {
+    background: #edfdf3;
+    border-color: #d7f5e3;
+}
+
+.option-green .option-icon {
+    background: #d8f8e5;
+    color: #16a34a;
+}
+
+
+.option-gold {
+    background: #fff8e8;
+    border-color: #ffedbd;
+}
+
+.option-gold .option-icon {
+    background: #ffedbd;
+    color: #d97706;
+}
+
+
+.option-pink {
+    background: #fff0f7;
+    border-color: #ffdcec;
+}
+
+.option-pink .option-icon {
+    background: #ffdceb;
+    color: #db2777;
+}
+
+
+/* =========================
+   CANCEL
+========================= */
+
+.cancel-download {
+    width: 100%;
+
+    margin-top: 13px;
+
+    height: 46px;
+
+    border: 1px solid #e4e7ec;
+
+    background: #fff;
+
+    color: #667085;
+
+    border-radius: 12px;
+
+    font-size: 14px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition: .18s;
+}
+
+.cancel-download:hover {
+    background: #f9fafb;
+    border-color: #d0d5dd;
+}
+
+
+/* =========================
+   FEATURES
+========================= */
+
+.features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+.features div,
+.history,
+.notice {
+    background: #fff;
+    border: 1px solid #eaecf0;
+    border-radius: 16px;
+    padding: 22px;
+}
+
+.features strong,
+.features span {
+    display: block;
+}
+
+.features span {
+    color: #667085;
+    font-size: 14px;
+    margin-top: 8px;
+    line-height: 1.5;
+}
+
+
+/* =========================
+   HISTORY
+========================= */
+
+.history {
+    margin-top: 15px;
+}
+
+.sectionHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sectionHead h2 {
+    margin: 0;
+}
+
+.sectionHead button {
+    border: 0;
+    background: none;
+    color: #667085;
+    cursor: pointer;
+}
+
+.item {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.item a {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: inherit;
+}
+
+.item button {
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.empty {
+    color: #98a2b3;
+}
+
+
+/* =========================
+   NOTICE
+========================= */
+
+.notice {
+    margin-top: 15px;
+    color: #667085;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+
+/* =========================
+   MESSAGE
+========================= */
+
+#msg {
+    margin-top: 15px;
+    font-size: 14px;
+    color: #667085;
+}
+
+
+/* =========================
+   FOOTER
+========================= */
+
+footer {
+    text-align: center;
+    color: #98a2b3;
+    padding: 30px;
+}
+
+
+/* =========================
+   DARK MODE
+========================= */
+
+.dark {
+    background: #101828;
+    color: #f2f4f7;
+}
+
+.dark header,
+.dark .features div,
+.dark .history,
+.dark .notice,
+.dark .hero form,
+.dark .download-options-inner {
+    background: #182230;
+    border-color: #344054;
+}
+
+.dark header button {
+    background: #182230;
+    color: #fff;
+    border-color: #475467;
+}
+
+.dark .hero input {
+    background: transparent;
+    color: #fff;
+}
+
+.dark .hero p,
+.dark .features span,
+.dark .notice {
+    color: #98a2b3;
+}
+
+.dark .options-header h3 {
+    color: #f2f4f7;
+}
+
+.dark .options-header p {
+    color: #98a2b3;
+}
+
+.dark .options-icon {
+    background: #1d3154;
+}
+
+.dark .download-option {
+    border-color: rgba(255, 255, 255, .08);
+}
+
+.dark .option-text strong {
+    color: #f2f4f7;
+}
+
+.dark .option-text small {
+    color: #98a2b3;
+}
+
+.dark .option-size {
+    background: rgba(255, 255, 255, .08);
+    color: #d0d5dd;
+    border-color: rgba(255, 255, 255, .1);
+}
+
+.dark .cancel-download {
+    background: #182230;
+    color: #d0d5dd;
+    border-color: #344054;
+}
+
+
+/* =========================
+   MOBILE
+========================= */
+
+@media (max-width: 650px) {
+
+    main {
+        padding: 35px 14px;
+    }
+
+    .features {
+        grid-template-columns: 1fr;
+    }
+
+    .hero {
+        padding-top: 25px;
+    }
+
+    .hero form {
+        flex-direction: column;
+    }
+
+    .hero form button {
+        height: 50px;
+    }
+
+    #download-options {
+        margin-top: 18px;
+    }
+
+    .download-options-inner {
+        padding: 15px;
+        border-radius: 18px;
+    }
+
+    .options-header {
+        margin-bottom: 14px;
+    }
+
+    .download-option {
+        min-height: 66px;
+        padding: 9px;
+        gap: 9px;
+    }
+
+    .option-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+    }
+
+    .option-text strong {
+        font-size: 13px;
+    }
+
+    .option-text small {
+        font-size: 11px;
+    }
+
+    .option-size {
+        font-size: 10px;
+        padding: 5px 7px;
+    }
+
+    .option-arrow {
+        display: none;
+    }
+}
