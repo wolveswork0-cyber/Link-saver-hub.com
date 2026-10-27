@@ -18,7 +18,6 @@ let history = JSON.parse(
 // =========================
 
 function render() {
-
     if (!list) return;
 
     list.innerHTML = history.length
@@ -35,13 +34,11 @@ function render() {
                 </button>
             </div>
         `).join("")
-
         : '<p class="empty">No downloads yet.</p>';
 }
 
 
 function removeItem(index) {
-
     history.splice(index, 1);
 
     localStorage.setItem(
@@ -53,24 +50,17 @@ function removeItem(index) {
 }
 
 
-const clearButton =
-    document.querySelector("#clear");
+const clearButton = document.querySelector("#clear");
 
 if (clearButton) {
+    clearButton.addEventListener("click", () => {
 
-    clearButton.addEventListener(
-        "click",
-        () => {
+        history = [];
 
-            history = [];
+        localStorage.removeItem("linkdrop-history");
 
-            localStorage.removeItem(
-                "linkdrop-history"
-            );
-
-            render();
-        }
-    );
+        render();
+    });
 }
 
 
@@ -78,21 +68,52 @@ if (clearButton) {
 // SIZE DISPLAY
 // =========================
 
-function displaySize(sizeObject) {
+function displaySize(size) {
 
-    if (!sizeObject) {
+    if (!size) {
         return "Size unavailable";
     }
 
-    if (!sizeObject.display) {
-        return "Size unavailable";
+    if (typeof size === "string") {
+        return size;
     }
 
-    if (sizeObject.approx) {
-        return `~${sizeObject.display}`;
+    if (size.display) {
+        return size.approx
+            ? `~${size.display}`
+            : size.display;
     }
 
-    return sizeObject.display;
+    return "Size unavailable";
+}
+
+
+// =========================
+// CLEAN FILENAME
+// =========================
+
+function cleanFilename(name) {
+
+    if (!name) {
+        return "download";
+    }
+
+    name = String(name).trim();
+
+    // Remove invalid filename characters
+    name = name.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+
+    // Remove trailing dots/spaces
+    name = name.replace(/[. ]+$/g, "");
+
+    // Limit filename length
+    name = name.substring(0, 180).trim();
+
+    if (!name) {
+        return "download";
+    }
+
+    return name;
 }
 
 
@@ -117,6 +138,7 @@ async function getVideoInfo(url) {
         }
     );
 
+
     if (!response.ok) {
 
         let errorMessage =
@@ -138,7 +160,21 @@ async function getVideoInfo(url) {
         throw new Error(errorMessage);
     }
 
-    return await response.json();
+
+    const data =
+        await response.json();
+
+
+    if (!data.success) {
+
+        throw new Error(
+            data.error ||
+            "Could not read video information."
+        );
+    }
+
+
+    return data;
 }
 
 
@@ -153,6 +189,7 @@ async function showOptions(url) {
             "#download-options"
         );
 
+
     if (oldBox) {
         oldBox.remove();
     }
@@ -166,6 +203,7 @@ async function showOptions(url) {
 
     let videoInfo;
 
+
     try {
 
         videoInfo =
@@ -177,6 +215,7 @@ async function showOptions(url) {
             "Info error:",
             error
         );
+
 
         if (msg) {
 
@@ -192,8 +231,16 @@ async function showOptions(url) {
         videoInfo.sizes || {};
 
 
+    const videoTitle =
+        cleanFilename(
+            videoInfo.title ||
+            "download"
+        );
+
+
     const box =
         document.createElement("div");
+
 
     box.id =
         "download-options";
@@ -214,7 +261,7 @@ async function showOptions(url) {
                     </h3>
 
                     <p>
-                        Choose quality for your download
+                        ${escapeHtml(videoTitle)}
                     </p>
                 </div>
 
@@ -234,8 +281,15 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-text">
-                        <strong>MP4 — 480p</strong>
-                        <small>Standard quality</small>
+
+                        <strong>
+                            MP4 — 480p
+                        </strong>
+
+                        <small>
+                            Standard quality
+                        </small>
+
                     </span>
 
                     <span class="option-size">
@@ -260,8 +314,15 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-text">
-                        <strong>MP4 — 720p</strong>
-                        <small>HD quality</small>
+
+                        <strong>
+                            MP4 — 720p
+                        </strong>
+
+                        <small>
+                            HD quality
+                        </small>
+
                     </span>
 
                     <span class="option-size">
@@ -286,8 +347,15 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-text">
-                        <strong>MP4 — 1080p</strong>
-                        <small>Full HD quality</small>
+
+                        <strong>
+                            MP4 — 1080p
+                        </strong>
+
+                        <small>
+                            Full HD quality
+                        </small>
+
                     </span>
 
                     <span class="option-size">
@@ -312,8 +380,15 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-text">
-                        <strong>MP4 — Best Quality</strong>
-                        <small>Highest available quality</small>
+
+                        <strong>
+                            MP4 — Best Quality
+                        </strong>
+
+                        <small>
+                            Highest available quality
+                        </small>
+
                     </span>
 
                     <span class="option-size">
@@ -338,19 +413,21 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-text">
-                        <strong>MP3 — Audio</strong>
-                        <small>192 kbps MP3</small>
+
+                        <strong>
+                            MP3 — Audio
+                        </strong>
+
+                        <small>
+                            192 kbps MP3
+                        </small>
+
                     </span>
 
                     <span class="option-size">
-                        ${
-                            sizes.mp3 &&
-                            sizes.mp3.source
-                                ? displaySize(
-                                    sizes.mp3.source
-                                )
-                                : "Size unavailable"
-                        }
+                        ${displaySize(
+                            sizes["mp3"]
+                        )}
                     </span>
 
                     <span class="option-arrow">
@@ -405,12 +482,15 @@ async function showOptions(url) {
                 const quality =
                     button.dataset.quality;
 
+
                 box.remove();
+
 
                 startDownload(
                     url,
                     format,
-                    quality
+                    quality,
+                    videoTitle
                 );
             }
         );
@@ -425,6 +505,7 @@ async function showOptions(url) {
         box.querySelector(
             "#cancel-download"
         );
+
 
     if (cancelButton) {
 
@@ -459,7 +540,8 @@ async function showOptions(url) {
 async function startDownload(
     url,
     format,
-    quality
+    quality,
+    videoTitle
 ) {
 
     if (!url) {
@@ -578,12 +660,14 @@ async function startDownload(
 
         let filename = "";
 
+
         const disposition =
             response.headers.get(
                 "Content-Disposition"
             );
 
 
+        // First try server filename
         if (disposition) {
 
             const utfMatch =
@@ -622,41 +706,50 @@ async function startDownload(
         }
 
 
-        // Fallback
+        // =========================
+        // IMPORTANT FALLBACK
+        // =========================
+        // Use the actual video title.
+        // NEVER use LinkDrop as filename.
+
         if (!filename) {
 
-            if (format === "mp3") {
+            filename =
+                cleanFilename(
+                    videoTitle ||
+                    "download"
+                );
 
-                filename =
-                    "LinkDrop-Audio.mp3";
 
-            } else if (
-                quality === "480"
+            if (
+                format === "mp3" ||
+                quality === "audio"
             ) {
 
-                filename =
-                    "LinkDrop-480p.mp4";
-
-            } else if (
-                quality === "720"
-            ) {
-
-                filename =
-                    "LinkDrop-720p.mp4";
-
-            } else if (
-                quality === "1080"
-            ) {
-
-                filename =
-                    "LinkDrop-1080p.mp4";
+                filename += ".mp3";
 
             } else {
 
-                filename =
-                    "LinkDrop-Best-Quality.mp4";
+                filename += ".mp4";
             }
         }
+
+
+        filename =
+            cleanFilename(
+                filename
+                    .replace(
+                        /\.(mp4|mp3)$/i,
+                        ""
+                    )
+            )
+            +
+            (
+                format === "mp3" ||
+                quality === "audio"
+                    ? ".mp3"
+                    : ".mp4"
+            );
 
 
         // =========================
@@ -676,6 +769,7 @@ async function startDownload(
         link.href =
             downloadURL;
 
+
         link.download =
             filename;
 
@@ -684,7 +778,9 @@ async function startDownload(
             link
         );
 
+
         link.click();
+
 
         link.remove();
 
@@ -770,6 +866,21 @@ async function startDownload(
 
 
 // =========================
+// HTML ESCAPE
+// =========================
+
+function escapeHtml(text) {
+
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+// =========================
 // FORM SUBMIT
 // =========================
 
@@ -815,7 +926,6 @@ if (form) {
                 }
 
 
-                // Show format options
                 await showOptions(
                     url
                 );
