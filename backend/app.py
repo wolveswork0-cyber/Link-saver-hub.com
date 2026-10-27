@@ -12,8 +12,6 @@ import yt_dlp
 
 app = Flask(__name__)
 
-# IMPORTANT:
-# Allow frontend to read Content-Disposition filename header
 CORS(
     app,
     expose_headers=["Content-Disposition"]
@@ -24,7 +22,11 @@ CORS(
 # =========================================================
 
 APP_DIR = Path(__file__).resolve().parent
-DOWNLOAD_BASE = Path(tempfile.gettempdir()) / "linkdrop_pro"
+
+DOWNLOAD_BASE = (
+    Path(tempfile.gettempdir())
+    / "linkdrop_pro"
+)
 
 DOWNLOAD_BASE.mkdir(
     parents=True,
@@ -157,7 +159,10 @@ def clean_filename(name):
     invalid_chars = '<>:"/\\|?*'
 
     for char in invalid_chars:
-        name = name.replace(char, "_")
+        name = name.replace(
+            char,
+            "_"
+        )
 
     name = "".join(
         char
@@ -189,13 +194,14 @@ def clean_filename(name):
     return name
 
 
-def format_size(size):
+def format_size(size, approximate=False):
 
     if size is None:
         return None
 
     try:
         size = float(size)
+
     except Exception:
         return None
 
@@ -217,54 +223,30 @@ def format_size(size):
         if value < 1024:
 
             if unit == "B":
-                return f"{int(value)} B"
 
-            return f"{value:.1f} {unit}"
+                text = (
+                    f"{int(value)} B"
+                )
+
+            else:
+
+                text = (
+                    f"{value:.1f} {unit}"
+                )
+
+            if approximate:
+                return "~" + text
+
+            return text
 
         value /= 1024
 
-    return f"{value:.1f} PB"
+    text = f"{value:.1f} PB"
 
+    if approximate:
+        return "~" + text
 
-def get_format_size(fmt):
-
-    if not fmt:
-        return None
-
-    filesize = fmt.get(
-        "filesize"
-    )
-
-    if filesize:
-        return filesize
-
-    filesize_approx = fmt.get(
-        "filesize_approx"
-    )
-
-    if filesize_approx:
-        return filesize_approx
-
-    # If filesize is unavailable,
-    # estimate from bitrate × duration.
-    tbr = fmt.get("tbr")
-    duration = fmt.get("duration")
-
-    if tbr and duration:
-
-        try:
-
-            return (
-                float(tbr)
-                * 1000
-                / 8
-                * float(duration)
-            )
-
-        except Exception:
-            pass
-
-    return None
+    return text
 
 
 def get_duration(info):
@@ -276,13 +258,593 @@ def get_duration(info):
         )
 
         if duration:
-            return float(duration)
+
+            return float(
+                duration
+            )
 
     except Exception:
         pass
 
     return None
 
+
+def get_format_size(fmt):
+
+    if not fmt:
+        return None, False
+
+    # ---------------------------------------------
+    # Exact filesize
+    # ---------------------------------------------
+
+    filesize = fmt.get(
+        "filesize"
+    )
+
+    if filesize:
+
+        try:
+
+            return (
+                float(filesize),
+                False
+            )
+
+        except Exception:
+            pass
+
+    # ---------------------------------------------
+    # Approximate filesize from yt-dlp
+    # ---------------------------------------------
+
+    filesize_approx = fmt.get(
+        "filesize_approx"
+    )
+
+    if filesize_approx:
+
+        try:
+
+            return (
+                float(filesize_approx),
+                True
+            )
+
+        except Exception:
+            pass
+
+    # ---------------------------------------------
+    # Calculate from bitrate × duration
+    # ---------------------------------------------
+
+    tbr = fmt.get(
+        "tbr"
+    )
+
+    duration = fmt.get(
+        "duration"
+    )
+
+    if tbr and duration:
+
+        try:
+
+            size = (
+                float(tbr)
+                * 1000
+                * float(duration)
+                / 8
+            )
+
+            if size > 0:
+
+                return (
+                    size,
+                    True
+                )
+
+        except Exception:
+            pass
+
+    return (
+        None,
+        False
+    )
+
+
+def get_audio_formats(info):
+
+    formats = (
+        info.get("formats")
+        or []
+    )
+
+    result = []
+
+    for fmt in formats:
+
+        if not fmt:
+            continue
+
+        acodec = fmt.get(
+            "acodec"
+        )
+
+        if not acodec:
+            continue
+
+        if acodec == "none":
+            continue
+
+        size, approximate = (
+            get_format_size(fmt)
+        )
+
+        if size is None:
+            continue
+
+        abr = fmt.get(
+            "abr"
+        )
+
+        try:
+
+            abr = float(
+                abr or 0
+            )
+
+        except Exception:
+
+            abr = 0
+
+        result.append(
+            {
+                "abr": abr,
+                "size": size,
+                "approximate": approximate,
+                "format": fmt
+            }
+        )
+
+    return result
+
+
+def get_video_formats(
+    info,
+    max_height=None
+):
+
+    formats = (
+        info.get("formats")
+        or []
+    )
+
+    result = []
+
+    for fmt in formats:
+
+        if not fmt:
+            continue
+
+        vcodec = fmt.get(
+            "vcodec"
+        )
+
+        if not vcodec:
+            continue
+
+        if vcodec == "none":
+            continue
+
+        height = fmt.get(
+            "height"
+        )
+
+        if not height:
+            continue
+
+        try:
+
+            height = int(
+                height
+            )
+
+        except Exception:
+
+            continue
+
+        if max_height is not None:
+
+            if height > max_height:
+                continue
+
+        size, approximate = (
+            get_format_size(fmt)
+        )
+
+        result.append(
+            {
+                "height": height,
+                "size": size,
+                "approximate": approximate,
+                "format": fmt
+            }
+        )
+
+    return result
+
+
+# =========================================================
+# FALLBACK VIDEO BITRATES
+# =========================================================
+
+def fallback_bitrate(height):
+
+    # Approximate total video bitrate.
+    #
+    # These are only used when yt-dlp does not provide
+    # filesize or bitrate information.
+
+    if height <= 480:
+
+        return 1500 * 1000
+
+    if height <= 720:
+
+        return 3000 * 1000
+
+    if height <= 1080:
+
+        return 5000 * 1000
+
+    return 8000 * 1000
+
+
+def estimate_video_size(
+    info,
+    target_height
+):
+
+    duration = get_duration(
+        info
+    )
+
+    if not duration:
+        return None, True
+
+    video_formats = get_video_formats(
+        info,
+        target_height
+    )
+
+    if not video_formats:
+        return None, True
+
+    # ---------------------------------------------
+    # Pick highest available video quality
+    # under requested resolution
+    # ---------------------------------------------
+
+    video_formats.sort(
+        key=lambda item: (
+            item["height"],
+            item["size"] or 0
+        ),
+        reverse=True
+    )
+
+    selected = (
+        video_formats[0]
+    )
+
+    video_size = (
+        selected["size"]
+    )
+
+    approximate = (
+        selected["approximate"]
+    )
+
+    # ---------------------------------------------
+    # If actual/approximate filesize exists
+    # ---------------------------------------------
+
+    if video_size is not None:
+
+        total = video_size
+
+    else:
+
+        bitrate = fallback_bitrate(
+            selected["height"]
+        )
+
+        total = (
+            bitrate
+            * duration
+            / 8
+        )
+
+        approximate = True
+
+    # ---------------------------------------------
+    # Add best available audio
+    # ---------------------------------------------
+
+    audio_formats = get_audio_formats(
+        info
+    )
+
+    if audio_formats:
+
+        audio_formats.sort(
+            key=lambda item: (
+                item["abr"],
+                item["size"]
+            ),
+            reverse=True
+        )
+
+        audio = (
+            audio_formats[0]
+        )
+
+        if audio["size"] is not None:
+
+            total += audio["size"]
+
+            if audio["approximate"]:
+                approximate = True
+
+        else:
+
+            # Typical audio fallback
+            audio_bitrate = (
+                128 * 1000
+            )
+
+            total += (
+                audio_bitrate
+                * duration
+                / 8
+            )
+
+            approximate = True
+
+    else:
+
+        # Audio unavailable in metadata,
+        # use conservative fallback.
+        audio_bitrate = (
+            128 * 1000
+        )
+
+        total += (
+            audio_bitrate
+            * duration
+            / 8
+        )
+
+        approximate = True
+
+    return (
+        total,
+        approximate
+    )
+
+
+def calculate_best_size(info):
+
+    formats = (
+        info.get("formats")
+        or []
+    )
+
+    best_size = None
+    approximate = False
+
+    # ---------------------------------------------
+    # Complete video+audio formats
+    # ---------------------------------------------
+
+    for fmt in formats:
+
+        if not fmt:
+            continue
+
+        vcodec = fmt.get(
+            "vcodec"
+        )
+
+        if not vcodec:
+            continue
+
+        if vcodec == "none":
+            continue
+
+        acodec = fmt.get(
+            "acodec"
+        )
+
+        if not acodec:
+            continue
+
+        if acodec == "none":
+            continue
+
+        size, is_approx = (
+            get_format_size(fmt)
+        )
+
+        if size is None:
+            continue
+
+        if (
+            best_size is None
+            or
+            size > best_size
+        ):
+
+            best_size = size
+            approximate = is_approx
+
+    # ---------------------------------------------
+    # Separate video + audio
+    # ---------------------------------------------
+
+    video_formats = get_video_formats(
+        info,
+        None
+    )
+
+    audio_formats = get_audio_formats(
+        info
+    )
+
+    if video_formats:
+
+        video_formats.sort(
+            key=lambda item: (
+                item["height"],
+                item["size"] or 0
+            ),
+            reverse=True
+        )
+
+        video = (
+            video_formats[0]
+        )
+
+        video_size = (
+            video["size"]
+        )
+
+        video_approx = (
+            video["approximate"]
+        )
+
+        if video_size is None:
+
+            duration = get_duration(
+                info
+            )
+
+            if duration:
+
+                bitrate = fallback_bitrate(
+                    video["height"]
+                )
+
+                video_size = (
+                    bitrate
+                    * duration
+                    / 8
+                )
+
+                video_approx = True
+
+        audio_size = 0
+        audio_approx = False
+
+        if audio_formats:
+
+            audio_formats.sort(
+                key=lambda item: (
+                    item["abr"],
+                    item["size"]
+                ),
+                reverse=True
+            )
+
+            audio = (
+                audio_formats[0]
+            )
+
+            if audio["size"] is not None:
+
+                audio_size = (
+                    audio["size"]
+                )
+
+                audio_approx = (
+                    audio["approximate"]
+                )
+
+            else:
+
+                duration = get_duration(
+                    info
+                )
+
+                if duration:
+
+                    audio_size = (
+                        128
+                        * 1000
+                        * duration
+                        / 8
+                    )
+
+                    audio_approx = True
+
+        if video_size is not None:
+
+            combined = (
+                video_size
+                + audio_size
+            )
+
+            if (
+                best_size is None
+                or
+                combined > best_size
+            ):
+
+                best_size = combined
+
+                approximate = (
+                    video_approx
+                    or
+                    audio_approx
+                )
+
+    return (
+        best_size,
+        approximate
+    )
+
+
+def calculate_audio_size(info):
+
+    audio_formats = get_audio_formats(
+        info
+    )
+
+    if not audio_formats:
+        return None, True
+
+    audio_formats.sort(
+        key=lambda item: (
+            item["abr"],
+            item["size"]
+        ),
+        reverse=True
+    )
+
+    selected = (
+        audio_formats[0]
+    )
+
+    return (
+        selected["size"],
+        selected["approximate"]
+    )
+
+
+# =========================================================
+# COMMON YT-DLP OPTIONS
+# =========================================================
 
 def get_common_ydl_opts():
 
@@ -297,7 +859,11 @@ def get_common_ydl_opts():
         "extractor_args": {
 
             "youtube": {
-                "player_client": ["web"]
+
+                "player_client": [
+                    "web"
+                ]
+
             },
 
             "youtubepot-bgutilhttp": {
@@ -306,11 +872,15 @@ def get_common_ydl_opts():
                     f"http://127.0.0.1:{BGUTIL_PORT}"
 
             }
+
         }
+
     }
 
 
-def choose_video_format(height=None):
+def choose_video_format(
+    height=None
+):
 
     if height == 480:
 
@@ -344,287 +914,8 @@ def choose_audio_format():
 
 
 # =========================================================
-# SIZE CALCULATION
+# HOME
 # =========================================================
-
-
-def format_matches_height(fmt, height):
-
-    if not fmt:
-        return False
-
-    fmt_height = fmt.get(
-        "height"
-    )
-
-    if not fmt_height:
-        return False
-
-    try:
-
-        return int(fmt_height) <= int(height)
-
-    except Exception:
-
-        return False
-
-
-def get_video_formats(info, height=None):
-
-    formats = (
-        info.get("formats")
-        or []
-    )
-
-    result = []
-
-    for fmt in formats:
-
-        if not fmt:
-            continue
-
-        vcodec = fmt.get(
-            "vcodec"
-        )
-
-        if not vcodec or vcodec == "none":
-            continue
-
-        fmt_height = fmt.get(
-            "height"
-        )
-
-        if not fmt_height:
-            continue
-
-        try:
-            fmt_height = int(
-                fmt_height
-            )
-        except Exception:
-            continue
-
-        if height is not None:
-
-            if fmt_height > height:
-                continue
-
-        size = get_format_size(
-            fmt
-        )
-
-        if size is None:
-            continue
-
-        result.append(
-            (
-                fmt_height,
-                size,
-                fmt
-            )
-        )
-
-    return result
-
-
-def get_audio_formats(info):
-
-    formats = (
-        info.get("formats")
-        or []
-    )
-
-    result = []
-
-    for fmt in formats:
-
-        if not fmt:
-            continue
-
-        acodec = fmt.get(
-            "acodec"
-        )
-
-        if not acodec or acodec == "none":
-            continue
-
-        size = get_format_size(
-            fmt
-        )
-
-        if size is None:
-            continue
-
-        abr = fmt.get(
-            "abr"
-        )
-
-        try:
-            abr = float(
-                abr or 0
-            )
-        except Exception:
-            abr = 0
-
-        result.append(
-            (
-                abr,
-                size,
-                fmt
-            )
-        )
-
-    return result
-
-
-def calculate_selected_video_size(
-    info,
-    height=None
-):
-
-    duration = get_duration(
-        info
-    )
-
-    video_formats = get_video_formats(
-        info,
-        height
-    )
-
-    audio_formats = get_audio_formats(
-        info
-    )
-
-    if not video_formats:
-        return None
-
-    # Highest available video quality
-    video_formats.sort(
-        key=lambda item: (
-            item[0],
-            item[1]
-        ),
-        reverse=True
-    )
-
-    selected_video = (
-        video_formats[0]
-    )
-
-    video_size = (
-        selected_video[1]
-    )
-
-    audio_size = 0
-
-    if audio_formats:
-
-        audio_formats.sort(
-            key=lambda item: (
-                item[0],
-                item[1]
-            ),
-            reverse=True
-        )
-
-        audio_size = (
-            audio_formats[0][1]
-        )
-
-    total = (
-        video_size
-        + audio_size
-    )
-
-    return total
-
-
-def calculate_best_size(info):
-
-    formats = (
-        info.get("formats")
-        or []
-    )
-
-    duration = get_duration(
-        info
-    )
-
-    best_size = None
-
-    # First try complete formats
-    for fmt in formats:
-
-        if not fmt:
-            continue
-
-        if (
-            fmt.get("vcodec") == "none"
-        ):
-            continue
-
-        size = get_format_size(
-            fmt
-        )
-
-        if size is None:
-            continue
-
-        if best_size is None:
-            best_size = size
-        else:
-            best_size = max(
-                best_size,
-                size
-            )
-
-    # If separate video/audio streams
-    # are available, calculate them.
-    separate_size = (
-        calculate_selected_video_size(
-            info,
-            None
-        )
-    )
-
-    if separate_size:
-
-        if best_size is None:
-            best_size = separate_size
-
-        else:
-            best_size = max(
-                best_size,
-                separate_size
-            )
-
-    return best_size
-
-
-def calculate_audio_size(info):
-
-    audio_formats = get_audio_formats(
-        info
-    )
-
-    if not audio_formats:
-        return None
-
-    audio_formats.sort(
-        key=lambda item: (
-            item[0],
-            item[1]
-        ),
-        reverse=True
-    )
-
-    return audio_formats[0][1]
-
-
-# =========================================================
-# BASIC ROUTE
-# =========================================================
-
 
 @app.route(
     "/",
@@ -646,7 +937,6 @@ def home():
 # =========================================================
 # INFO API
 # =========================================================
-
 
 @app.route(
     "/api/info",
@@ -672,7 +962,8 @@ def api_info():
 
         return jsonify({
 
-            "success": False,
+            "success":
+                False,
 
             "error":
                 "URL is required"
@@ -687,7 +978,8 @@ def api_info():
 
         return jsonify({
 
-            "success": False,
+            "success":
+                False,
 
             "error":
                 "Invalid URL"
@@ -723,42 +1015,95 @@ def api_info():
             "thumbnail"
         )
 
-        # -----------------------------
-        # CALCULATE SIZES
-        # -----------------------------
+        # ---------------------------------------------
+        # RESOLUTION SIZES
+        # ---------------------------------------------
 
-        size_480 = (
-            calculate_selected_video_size(
+        size_480, approx_480 = (
+            estimate_video_size(
                 info,
                 480
             )
         )
 
-        size_720 = (
-            calculate_selected_video_size(
+        size_720, approx_720 = (
+            estimate_video_size(
                 info,
                 720
             )
         )
 
-        size_1080 = (
-            calculate_selected_video_size(
+        size_1080, approx_1080 = (
+            estimate_video_size(
                 info,
                 1080
             )
         )
 
-        size_best = (
+        size_best, approx_best = (
             calculate_best_size(
                 info
             )
         )
 
-        size_mp3 = (
+        size_mp3, approx_mp3 = (
             calculate_audio_size(
                 info
             )
         )
+
+        sizes = {
+
+            "480p":
+                format_size(
+                    size_480,
+                    approx_480
+                ),
+
+            "720p":
+                format_size(
+                    size_720,
+                    approx_720
+                ),
+
+            "1080p":
+                format_size(
+                    size_1080,
+                    approx_1080
+                ),
+
+            "best":
+                format_size(
+                    size_best,
+                    approx_best
+                ),
+
+            "mp3":
+                format_size(
+                    size_mp3,
+                    approx_mp3
+                )
+
+        }
+
+        sizes_bytes = {
+
+            "480p":
+                size_480,
+
+            "720p":
+                size_720,
+
+            "1080p":
+                size_1080,
+
+            "best":
+                size_best,
+
+            "mp3":
+                size_mp3
+
+        }
 
         print(
             "INFO TITLE:",
@@ -767,32 +1112,7 @@ def api_info():
 
         print(
             "INFO SIZES:",
-            {
-                "480p":
-                    format_size(
-                        size_480
-                    ),
-
-                "720p":
-                    format_size(
-                        size_720
-                    ),
-
-                "1080p":
-                    format_size(
-                        size_1080
-                    ),
-
-                "best":
-                    format_size(
-                        size_best
-                    ),
-
-                "mp3":
-                    format_size(
-                        size_mp3
-                    )
-            }
+            sizes
         )
 
         return jsonify({
@@ -809,51 +1129,12 @@ def api_info():
             "thumbnail":
                 thumbnail,
 
-            "sizes": {
+            "sizes":
+                sizes,
 
-                "480p":
-                    format_size(
-                        size_480
-                    ),
+            "sizes_bytes":
+                sizes_bytes
 
-                "720p":
-                    format_size(
-                        size_720
-                    ),
-
-                "1080p":
-                    format_size(
-                        size_1080
-                    ),
-
-                "best":
-                    format_size(
-                        size_best
-                    ),
-
-                "mp3":
-                    format_size(
-                        size_mp3
-                    )
-            },
-
-            "sizes_bytes": {
-
-                "480p":
-                    size_480,
-
-                "720p":
-                    size_720,
-
-                "1080p":
-                    size_1080,
-
-                "best":
-                    size_best,
-
-                "mp3":
-                    size_mp3
-            }
         })
 
     except Exception as e:
@@ -877,7 +1158,6 @@ def api_info():
 # =========================================================
 # DOWNLOAD API
 # =========================================================
-
 
 @app.route(
     "/api/download",
@@ -935,7 +1215,7 @@ def api_download():
         }), 400
 
     # =====================================================
-    # TEMP DIRECTORY
+    # JOB DIRECTORY
     # =====================================================
 
     job_id = uuid.uuid4().hex
@@ -960,33 +1240,36 @@ def api_download():
     )
 
     if quality == "480":
-
         quality = "480p"
 
     elif quality == "720":
-
         quality = "720p"
 
     elif quality == "1080":
-
         quality = "1080p"
 
     if quality == "480p":
 
         format_selector = (
-            choose_video_format(480)
+            choose_video_format(
+                480
+            )
         )
 
     elif quality == "720p":
 
         format_selector = (
-            choose_video_format(720)
+            choose_video_format(
+                720
+            )
         )
 
     elif quality == "1080p":
 
         format_selector = (
-            choose_video_format(1080)
+            choose_video_format(
+                1080
+            )
         )
 
     elif is_audio:
@@ -998,11 +1281,11 @@ def api_download():
     else:
 
         format_selector = (
-            choose_video_format(None)
+            choose_video_format()
         )
 
     # =====================================================
-    # OUTPUT TEMPLATE
+    # OUTPUT
     # =====================================================
 
     output_template = str(
@@ -1030,7 +1313,7 @@ def api_download():
             "mp4",
 
         "overwrites":
-            True,
+            True
 
     })
 
@@ -1048,6 +1331,7 @@ def api_download():
             "postprocessors": [
 
                 {
+
                     "key":
                         "FFmpegExtractAudio",
 
@@ -1056,8 +1340,11 @@ def api_download():
 
                     "preferredquality":
                         "192"
+
                 }
+
             ]
+
         })
 
     # =====================================================
@@ -1074,10 +1361,6 @@ def api_download():
                 url,
                 download=True
             )
-
-        # =================================================
-        # FIND FILE
-        # =================================================
 
         files = [
 
@@ -1136,7 +1419,7 @@ def api_download():
                 file_path = files[0]
 
         # =================================================
-        # ACTUAL TITLE
+        # REAL TITLE
         # =================================================
 
         title = clean_filename(
@@ -1152,10 +1435,6 @@ def api_download():
         extension = (
             file_path.suffix
         )
-
-        # =================================================
-        # FINAL FILENAME
-        # =================================================
 
         final_name = (
             f"{title}{extension}"
@@ -1173,7 +1452,6 @@ def api_download():
         ):
 
             if final_path.exists():
-
                 final_path.unlink()
 
             file_path.rename(
@@ -1190,7 +1468,7 @@ def api_download():
         )
 
         # =================================================
-        # SEND FILE
+        # SEND
         # =================================================
 
         response = send_file(
@@ -1269,7 +1547,6 @@ def api_download():
 # HEALTH
 # =========================================================
 
-
 @app.route(
     "/health",
     methods=["GET"]
@@ -1302,7 +1579,6 @@ def health():
 # =========================================================
 # RUN
 # =========================================================
-
 
 if __name__ == "__main__":
 
