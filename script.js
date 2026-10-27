@@ -4,42 +4,64 @@ const msg = document.querySelector("#msg");
 const list = document.querySelector("#list");
 const theme = document.querySelector("#theme");
 
-const API_BASE = "https://linkdrop-pro-3clf.onrender.com";
-const API_DOWNLOAD = `${API_BASE}/api/download`;
-const API_INFO = `${API_BASE}/api/info`;
+const API_BASE =
+    "https://linkdrop-pro-3clf.onrender.com";
+
+const API_DOWNLOAD =
+    `${API_BASE}/api/download`;
+
+const API_INFO =
+    `${API_BASE}/api/info`;
 
 let history = JSON.parse(
-    localStorage.getItem("linkdrop-history") || "[]"
+    localStorage.getItem(
+        "linkdrop-history"
+    ) || "[]"
 );
 
 
-// =========================
+// ========================================================
 // HISTORY
-// =========================
+// ========================================================
 
 function render() {
+
     if (!list) return;
 
-    list.innerHTML = history.length
-        ? history.map((url, index) => `
-            <div class="item">
-                <a href="${url}" target="_blank" rel="noopener">
-                    ${url}
-                </a>
+    list.innerHTML =
+        history.length
 
-                <button
-                    type="button"
-                    onclick="removeItem(${index})">
-                    ×
-                </button>
-            </div>
-        `).join("")
-        : '<p class="empty">No downloads yet.</p>';
+            ? history.map(
+                (url, index) => `
+                    <div class="item">
+
+                        <a
+                            href="${url}"
+                            target="_blank"
+                            rel="noopener">
+                            ${escapeHtml(url)}
+                        </a>
+
+                        <button
+                            type="button"
+                            onclick="removeItem(${index})">
+                            ×
+                        </button>
+
+                    </div>
+                `
+            ).join("")
+
+            : '<p class="empty">No downloads yet.</p>';
 }
 
 
 function removeItem(index) {
-    history.splice(index, 1);
+
+    history.splice(
+        index,
+        1
+    );
 
     localStorage.setItem(
         "linkdrop-history",
@@ -50,47 +72,49 @@ function removeItem(index) {
 }
 
 
-const clearButton = document.querySelector("#clear");
+const clearButton =
+    document.querySelector("#clear");
 
 if (clearButton) {
-    clearButton.addEventListener("click", () => {
 
-        history = [];
+    clearButton.addEventListener(
+        "click",
+        () => {
 
-        localStorage.removeItem("linkdrop-history");
+            history = [];
 
-        render();
-    });
+            localStorage.removeItem(
+                "linkdrop-history"
+            );
+
+            render();
+        }
+    );
 }
 
 
-// =========================
-// SIZE DISPLAY
-// =========================
+// ========================================================
+// SIZE
+// ========================================================
 
 function displaySize(size) {
 
-    if (!size) {
+    if (
+        size === null ||
+        size === undefined ||
+        size === ""
+    ) {
+
         return "Size unavailable";
     }
 
-    if (typeof size === "string") {
-        return size;
-    }
-
-    if (size.display) {
-        return size.approx
-            ? `~${size.display}`
-            : size.display;
-    }
-
-    return "Size unavailable";
+    return String(size);
 }
 
 
-// =========================
-// CLEAN FILENAME
-// =========================
+// ========================================================
+// FILENAME
+// ========================================================
 
 function cleanFilename(name) {
 
@@ -98,16 +122,30 @@ function cleanFilename(name) {
         return "download";
     }
 
-    name = String(name).trim();
+    name = String(
+        name
+    ).trim();
 
-    // Remove invalid filename characters
-    name = name.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_");
+    name = name.replace(
+        /[<>:"/\\|?*\x00-\x1F]/g,
+        "_"
+    );
 
-    // Remove trailing dots/spaces
-    name = name.replace(/[. ]+$/g, "");
+    name = name.replace(
+        /[. ]+$/g,
+        ""
+    );
 
-    // Limit filename length
-    name = name.substring(0, 180).trim();
+    name = name
+        .replace(
+            /\s+/g,
+            " "
+        )
+        .substring(
+            0,
+            180
+        )
+        .trim();
 
     if (!name) {
         return "download";
@@ -117,58 +155,56 @@ function cleanFilename(name) {
 }
 
 
-// =========================
-// GET VIDEO INFORMATION
-// =========================
+// ========================================================
+// GET INFO
+// ========================================================
 
 async function getVideoInfo(url) {
 
-    const response = await fetch(
-        API_INFO,
-        {
-            method: "POST",
+    const response =
+        await fetch(
+            API_INFO,
+            {
+                method: "POST",
 
-            headers: {
-                "Content-Type": "application/json"
-            },
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
 
-            body: JSON.stringify({
-                url: url
-            })
-        }
-    );
+                body: JSON.stringify({
+                    url: url
+                })
+            }
+        );
+
+
+    let data = null;
+
+    try {
+
+        data =
+            await response.json();
+
+    } catch (e) {}
 
 
     if (!response.ok) {
 
-        let errorMessage =
-            "Could not read video information.";
-
-        try {
-
-            const data =
-                await response.json();
-
-            if (data.details) {
-                errorMessage = data.details;
-            } else if (data.error) {
-                errorMessage = data.error;
-            }
-
-        } catch (e) {}
-
-        throw new Error(errorMessage);
+        throw new Error(
+            data?.error ||
+            "Could not read video information."
+        );
     }
 
 
-    const data =
-        await response.json();
-
-
-    if (!data.success) {
+    if (
+        !data ||
+        !data.success
+    ) {
 
         throw new Error(
-            data.error ||
+            data?.error ||
             "Could not read video information."
         );
     }
@@ -178,9 +214,9 @@ async function getVideoInfo(url) {
 }
 
 
-// =========================
+// ========================================================
 // DOWNLOAD OPTIONS
-// =========================
+// ========================================================
 
 async function showOptions(url) {
 
@@ -189,13 +225,13 @@ async function showOptions(url) {
             "#download-options"
         );
 
-
     if (oldBox) {
         oldBox.remove();
     }
 
 
     if (msg) {
+
         msg.textContent =
             "Checking available formats...";
     }
@@ -203,11 +239,12 @@ async function showOptions(url) {
 
     let videoInfo;
 
-
     try {
 
         videoInfo =
-            await getVideoInfo(url);
+            await getVideoInfo(
+                url
+            );
 
     } catch (error) {
 
@@ -216,11 +253,11 @@ async function showOptions(url) {
             error
         );
 
-
         if (msg) {
 
             msg.textContent =
-                "Could not check video formats. Please try again.";
+                "Could not check video formats: " +
+                error.message;
         }
 
         return;
@@ -239,14 +276,16 @@ async function showOptions(url) {
 
 
     const box =
-        document.createElement("div");
-
+        document.createElement(
+            "div"
+        );
 
     box.id =
         "download-options";
 
 
     box.innerHTML = `
+
         <div class="download-options-inner">
 
             <div class="options-header">
@@ -256,6 +295,7 @@ async function showOptions(url) {
                 </div>
 
                 <div>
+
                     <h3>
                         Select Download Format
                     </h3>
@@ -263,6 +303,7 @@ async function showOptions(url) {
                     <p>
                         ${escapeHtml(videoTitle)}
                     </p>
+
                 </div>
 
             </div>
@@ -274,7 +315,7 @@ async function showOptions(url) {
                     type="button"
                     class="download-option option-blue"
                     data-format="mp4"
-                    data-quality="480">
+                    data-quality="480p">
 
                     <span class="option-icon">
                         ▶
@@ -293,7 +334,9 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-size">
-                        ${displaySize(sizes["480"])}
+                        ${displaySize(
+                            sizes["480p"]
+                        )}
                     </span>
 
                     <span class="option-arrow">
@@ -307,7 +350,7 @@ async function showOptions(url) {
                     type="button"
                     class="download-option option-purple"
                     data-format="mp4"
-                    data-quality="720">
+                    data-quality="720p">
 
                     <span class="option-icon">
                         ▶
@@ -326,7 +369,9 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-size">
-                        ${displaySize(sizes["720"])}
+                        ${displaySize(
+                            sizes["720p"]
+                        )}
                     </span>
 
                     <span class="option-arrow">
@@ -340,7 +385,7 @@ async function showOptions(url) {
                     type="button"
                     class="download-option option-green"
                     data-format="mp4"
-                    data-quality="1080">
+                    data-quality="1080p">
 
                     <span class="option-icon">
                         ▶
@@ -359,7 +404,9 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-size">
-                        ${displaySize(sizes["1080"])}
+                        ${displaySize(
+                            sizes["1080p"]
+                        )}
                     </span>
 
                     <span class="option-arrow">
@@ -392,7 +439,9 @@ async function showOptions(url) {
                     </span>
 
                     <span class="option-size">
-                        ${displaySize(sizes["best"])}
+                        ${displaySize(
+                            sizes["best"]
+                        )}
                     </span>
 
                     <span class="option-arrow">
@@ -464,48 +513,47 @@ async function showOptions(url) {
     }
 
 
-    // =========================
+    // ====================================================
     // OPTION BUTTONS
-    // =========================
+    // ====================================================
 
     box.querySelectorAll(
         "button[data-format]"
-    ).forEach(button => {
+    ).forEach(
+        button => {
 
-        button.addEventListener(
-            "click",
-            () => {
+            button.addEventListener(
+                "click",
+                () => {
 
-                const format =
-                    button.dataset.format;
+                    const format =
+                        button.dataset.format;
 
-                const quality =
-                    button.dataset.quality;
+                    const quality =
+                        button.dataset.quality;
+
+                    box.remove();
+
+                    startDownload(
+                        url,
+                        format,
+                        quality,
+                        videoTitle
+                    );
+                }
+            );
+        }
+    );
 
 
-                box.remove();
-
-
-                startDownload(
-                    url,
-                    format,
-                    quality,
-                    videoTitle
-                );
-            }
-        );
-    });
-
-
-    // =========================
+    // ====================================================
     // CANCEL
-    // =========================
+    // ====================================================
 
     const cancelButton =
         box.querySelector(
             "#cancel-download"
         );
-
 
     if (cancelButton) {
 
@@ -533,9 +581,9 @@ async function showOptions(url) {
 }
 
 
-// =========================
+// ========================================================
 // START DOWNLOAD
-// =========================
+// ========================================================
 
 async function startDownload(
     url,
@@ -619,19 +667,12 @@ async function startDownload(
                 const errorData =
                     await response.json();
 
-                if (errorData.details) {
-
-                    errorText =
-                        errorData.details;
-
-                } else if (errorData.error) {
-
-                    errorText =
-                        errorData.error;
-                }
+                errorText =
+                    errorData.error ||
+                    errorData.details ||
+                    errorText;
 
             } catch (e) {}
-
 
             throw new Error(
                 errorText
@@ -654,9 +695,9 @@ async function startDownload(
         }
 
 
-        // =========================
-        // FILE NAME
-        // =========================
+        // =================================================
+        // GET REAL SERVER FILENAME
+        // =================================================
 
         let filename = "";
 
@@ -667,7 +708,6 @@ async function startDownload(
             );
 
 
-        // First try server filename
         if (disposition) {
 
             const utfMatch =
@@ -706,11 +746,9 @@ async function startDownload(
         }
 
 
-        // =========================
-        // IMPORTANT FALLBACK
-        // =========================
-        // Use the actual video title.
-        // NEVER use LinkDrop as filename.
+        // =================================================
+        // FALLBACK = ACTUAL VIDEO TITLE
+        // =================================================
 
         if (!filename) {
 
@@ -720,41 +758,44 @@ async function startDownload(
                     "download"
                 );
 
-
-            if (
-                format === "mp3" ||
-                quality === "audio"
-            ) {
-
-                filename += ".mp3";
-
-            } else {
-
-                filename += ".mp4";
-            }
+            filename +=
+                (
+                    format === "mp3"
+                    ||
+                    quality === "audio"
+                )
+                    ? ".mp3"
+                    : ".mp4";
         }
+
+
+        // Remove duplicate extension
+        filename =
+            filename.replace(
+                /\.(mp4|mp3)$/i,
+                ""
+            );
 
 
         filename =
             cleanFilename(
                 filename
-                    .replace(
-                        /\.(mp4|mp3)$/i,
-                        ""
-                    )
-            )
-            +
-            (
-                format === "mp3" ||
-                quality === "audio"
-                    ? ".mp3"
-                    : ".mp4"
             );
 
 
-        // =========================
-        // DOWNLOAD FILE
-        // =========================
+        filename +=
+            (
+                format === "mp3"
+                ||
+                quality === "audio"
+            )
+                ? ".mp3"
+                : ".mp4";
+
+
+        // =================================================
+        // BROWSER DOWNLOAD
+        // =================================================
 
         const downloadURL =
             URL.createObjectURL(
@@ -763,15 +804,19 @@ async function startDownload(
 
 
         const link =
-            document.createElement("a");
+            document.createElement(
+                "a"
+            );
 
 
         link.href =
             downloadURL;
 
-
         link.download =
             filename;
+
+        link.style.display =
+            "none";
 
 
         document.body.appendChild(
@@ -797,16 +842,20 @@ async function startDownload(
         );
 
 
-        // =========================
-        // SAVE HISTORY
-        // =========================
+        // =================================================
+        // HISTORY
+        // =================================================
 
         history = [
             url,
             ...history.filter(
-                item => item !== url
+                item =>
+                    item !== url
             )
-        ].slice(0, 10);
+        ].slice(
+            0,
+            10
+        );
 
 
         localStorage.setItem(
@@ -821,7 +870,7 @@ async function startDownload(
         if (msg) {
 
             msg.textContent =
-                "Download completed successfully.";
+                `Download completed: ${filename}`;
         }
 
 
@@ -831,7 +880,7 @@ async function startDownload(
     } catch (error) {
 
         console.error(
-            "LinkDrop download error:",
+            "Download error:",
             error
         );
 
@@ -842,13 +891,6 @@ async function startDownload(
                 "Download failed: " +
                 error.message;
         }
-
-
-        alert(
-            "Download failed:\n\n" +
-            error.message
-        );
-
 
     } finally {
 
@@ -865,30 +907,50 @@ async function startDownload(
 }
 
 
-// =========================
+// ========================================================
 // HTML ESCAPE
-// =========================
+// ========================================================
 
 function escapeHtml(text) {
 
     return String(text)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+
+        .replace(
+            /</g,
+            "&lt;"
+        )
+
+        .replace(
+            />/g,
+            "&gt;"
+        )
+
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
 
 
-// =========================
-// FORM SUBMIT
-// =========================
+// ========================================================
+// FORM
+// ========================================================
 
 if (form) {
 
     form.addEventListener(
         "submit",
-        async (event) => {
+        async event => {
 
             event.preventDefault();
 
@@ -912,12 +974,17 @@ if (form) {
             try {
 
                 const parsed =
-                    new URL(url);
+                    new URL(
+                        url
+                    );
 
 
                 if (
-                    parsed.protocol !== "http:" &&
-                    parsed.protocol !== "https:"
+                    parsed.protocol !==
+                        "http:"
+                    &&
+                    parsed.protocol !==
+                        "https:"
                 ) {
 
                     throw new Error(
@@ -929,7 +996,6 @@ if (form) {
                 await showOptions(
                     url
                 );
-
 
             } catch (error) {
 
@@ -944,9 +1010,9 @@ if (form) {
 }
 
 
-// =========================
+// ========================================================
 // DARK MODE
-// =========================
+// ========================================================
 
 if (theme) {
 
@@ -962,8 +1028,8 @@ if (theme) {
 }
 
 
-// =========================
-// INITIAL LOAD
-// =========================
+// ========================================================
+// INITIAL
+// ========================================================
 
 render();
