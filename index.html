@@ -2,23 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
 <title>LinkDrop Pro — Free Online Video & Media Downloader</title>
 
-<meta name="description" content="LinkDrop Pro is an online media downloader. Paste a publicly accessible link from supported platforms and download available media easily.">
+<meta name="description" content="LinkDrop Pro is a universal online media downloader. Paste a public link from supported platforms to access available media downloads.">
 
 <meta name="robots" content="index, follow">
 
 <link rel="canonical" href="https://wolveswork0-cyber.github.io/Link-saver-hub.com/">
 
-<!-- Google Search Console Verification -->
 <meta name="google-site-verification" content="ilRgH8gNqYuXb5ZO9m_6n29pwaqC5IE_LEOSUY5t4Wg">
 
-<meta name="theme-color" content="#101827">
+<meta name="theme-color" content="#07152d">
 
 <meta property="og:title" content="LinkDrop Pro — Universal Link Downloader">
-<meta property="og:description" content="Paste a publicly accessible media link and get started with LinkDrop Pro.">
+<meta property="og:description" content="Paste a public media link and get started with LinkDrop Pro.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://wolveswork0-cyber.github.io/Link-saver-hub.com/">
 
@@ -28,21 +27,23 @@
 <body>
 
 <header>
-  <div class="brand"><span>↓</span> LinkDrop <b>PRO</b></div>
-  <button id="theme">☾</button>
+  <a class="brand" href="#" aria-label="LinkDrop Pro home">
+    <span>↓</span> LinkDrop <b>PRO</b>
+  </a>
+  <button id="theme" aria-label="Toggle dark mode">☾</button>
 </header>
 
 <main>
 
 <section class="hero">
 
-<p class="badge">FAST • SIMPLE • MOBILE READY</p>
+<p class="badge">⚡ FAST • SIMPLE • MOBILE READY</p>
 
-<h1>Download from a link.</h1>
+<h1>Download from a <span>Link.</span></h1>
 
-<p>
-Paste a public YouTube, TikTok, Facebook, Instagram, X/Twitter,
-Snapchat or other supported URL.
+<p class="hero-description">
+Paste a publicly accessible media URL from a supported platform
+and get started with LinkDrop Pro.
 </p>
 
 <form id="form">
@@ -50,71 +51,172 @@ Snapchat or other supported URL.
 <input
   id="url"
   type="url"
-  placeholder="Paste video URL here..."
+  placeholder="Paste your video or media URL here..."
+  aria-label="Media URL"
   required
 >
 
 <button type="submit" id="downloadBtn">
-  Download
+  ↓ Download
 </button>
 
 </form>
 
-<div id="msg"></div>
+<div id="msg" role="status"></div>
+
+<p class="hero-note">🔒 No account or password required</p>
 
 </section>
 
-<section class="features">
 
-<div>
-<strong>⚡ Fast</strong>
-<span>Server-powered media processing.</span>
+<section class="platform-section">
+
+<div class="section-title">
+  <span class="eyebrow">ONE LINK, MANY POSSIBILITIES</span>
+  <h2>Supported Platforms</h2>
+  <p>Public links from platforms supported by our downloader.</p>
 </div>
 
-<div>
-<strong>🔒 Safer</strong>
-<span>No passwords or account credentials are requested.</span>
+<div class="platform-grid">
+  <div class="platform-card"><span class="platform-icon youtube">▶</span><b>YouTube</b></div>
+  <div class="platform-card"><span class="platform-icon tiktok">♪</span><b>TikTok</b></div>
+  <div class="platform-card"><span class="platform-icon facebook">f</span><b>Facebook</b></div>
+  <div class="platform-card"><span class="platform-icon instagram">◎</span><b>Instagram</b></div>
+  <div class="platform-card"><span class="platform-icon twitter">𝕏</span><b>X / Twitter</b></div>
+  <div class="platform-card"><span class="platform-icon snapchat">👻</span><b>Snapchat</b></div>
 </div>
 
-<div>
-<strong>📱 Responsive</strong>
-<span>Works on phone, tablet and desktop.</span>
-</div>
+<p class="platform-note">
+Availability depends on the platform, URL and content restrictions.
+</p>
 
 </section>
+
+
+<section class="features-section">
+
+<div class="section-title">
+  <span class="eyebrow">WHY LINKDROP PRO</span>
+  <h2>Simple. Smart. Convenient.</h2>
+  <p>Everything you need in one easy-to-use interface.</p>
+</div>
+
+<div class="features">
+
+<div class="feature-card">
+  <div class="feature-icon">⚡</div>
+  <h3>Easy to Use</h3>
+  <p>Paste a supported public link and follow the available download options.</p>
+</div>
+
+<div class="feature-card">
+  <div class="feature-icon">🔒</div>
+  <h3>Privacy Focused</h3>
+  <p>No social media account passwords are requested.</p>
+</div>
+
+<div class="feature-card">
+  <div class="feature-icon">📱</div>
+  <h3>Mobile Friendly</h3>
+  <p>Use the website on phones, tablets and desktop devices.</p>
+</div>
+
+<div class="feature-card">
+  <div class="feature-icon">🌐</div>
+  <h3>Multiple Platforms</h3>
+  <p>Work with public links from supported media platforms.</p>
+</div>
+
+</div>
+</section>
+
 
 <section class="history">
 
 <div class="sectionHead">
-<h2>Recent links</h2>
-<button id="clear">Clear</button>
+  <div>
+    <span class="eyebrow">YOUR ACTIVITY</span>
+    <h2>Recent Links</h2>
+  </div>
+  <button id="clear">Clear</button>
 </div>
 
 <div id="list">
-<p class="empty">No downloads yet.</p>
+  <p class="empty">No downloads yet.</p>
 </div>
 
 </section>
 
+
+<section class="faq-section">
+
+<div class="section-title">
+  <span class="eyebrow">HELP CENTER</span>
+  <h2>Frequently Asked Questions</h2>
+  <p>Some helpful information about LinkDrop Pro.</p>
+</div>
+
+<div class="faq-list">
+
+<details class="faq-item">
+  <summary>1. What is LinkDrop Pro?</summary>
+  <p>LinkDrop Pro is an online tool that processes publicly accessible media links from supported platforms.</p>
+</details>
+
+<details class="faq-item">
+  <summary>2. How do I use LinkDrop Pro?</summary>
+  <p>Copy a public media URL, paste it into the input box and press Download. Follow the available options.</p>
+</details>
+
+<details class="faq-item">
+  <summary>3. Which platforms are supported?</summary>
+  <p>Supported platforms may include YouTube, TikTok, Facebook, Instagram, X and Snapchat. Availability depends on the backend extractor and the individual URL.</p>
+</details>
+
+<details class="faq-item">
+  <summary>4. Is LinkDrop Pro free?</summary>
+  <p>You can access the LinkDrop Pro website without creating an account. Availability of individual services may vary.</p>
+</details>
+
+<details class="faq-item">
+  <summary>5. Do I need an account or password?</summary>
+  <p>No social media password is requested by LinkDrop Pro. Private or login-required content may not be supported.</p>
+</details>
+
+<details class="faq-item">
+  <summary>6. Why is my link not working?</summary>
+  <p>The link may be private, restricted, unsupported, unavailable or temporarily inaccessible. Try a publicly accessible link from a supported platform.</p>
+</details>
+
+<details class="faq-item">
+  <summary>7. Can I use LinkDrop Pro on my phone?</summary>
+  <p>Yes. The website is designed to work on mobile phones, tablets and desktop devices.</p>
+</details>
+
+<details class="faq-item">
+  <summary>8. Can I download private or protected content?</summary>
+  <p>No. Private, login-required, DRM-protected or otherwise restricted content may not be downloadable. Only download content you own or have permission to use.</p>
+</details>
+
+</div>
+</section>
+
+
 <section class="notice">
-
-<b>Supported:</b>
-Public URLs from supported platforms such as YouTube and other
-platforms that the backend extractor can access.
-
-<br><br>
-
-<b>Note:</b>
-Private, login-required, DRM-protected or otherwise restricted
-content may not be downloadable. Only download content you own
-or have permission to download, in accordance with platform rules.
-
+  <h3>Important Usage Notice</h3>
+  <p>
+  LinkDrop Pro is intended for publicly accessible media URLs supported by its backend.
+  Private, login-required, DRM-protected or restricted content may not be available.
+  Users are responsible for respecting copyright laws and the terms of the relevant platforms.
+  </p>
 </section>
 
 </main>
 
 <footer>
-© 2026 LinkDrop Pro
+  <div class="footer-brand">↓ LinkDrop <b>PRO</b></div>
+  <p>Simple access to supported public media links.</p>
+  <p>© 2026 LinkDrop Pro. All rights reserved.</p>
 </footer>
 
 <script src="script.js"></script>
