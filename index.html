@@ -8,7 +8,9 @@
     <title>LinkDrop Pro — Free Online Video Downloader</title>
     <meta name="description" content="Download publicly accessible videos and media using LinkDrop Pro. Paste a link and get started.">
     <meta name="robots" content="index, follow">
+
     <link rel="canonical" href="https://wolveswork0-cyber.github.io/Link-saver-hub.com/">
+
     <meta name="google-site-verification" content="ilRgH8gNqYuXb5ZO9m_6n29pwaqC5IE_LEOSUY5t4Wg">
     <meta name="theme-color" content="#071426">
 
@@ -28,54 +30,68 @@
     </a>
 
     <div class="header-right">
-        <span class="status"><i></i> Online</span>
-        <button id="theme" aria-label="Change theme">☀️</button>
+        <button id="theme" type="button" aria-label="Change theme">☀️</button>
     </div>
 </header>
 
 <main class="container">
 
-    <section class="hero" id="form">
+    <!-- HERO SECTION -->
+    <section class="hero">
+
         <div class="hero-badge">⚡ FAST • SIMPLE • MOBILE READY</div>
 
-        <h1>Download Videos<br><span>From Any Link</span></h1>
+        <h1>
+            Download Videos<br>
+            <span>From Any Link</span>
+        </h1>
 
         <p class="hero-description">
             Your all-in-one media downloader. Paste a publicly accessible
             video link below and download in just a few clicks.
         </p>
 
-        <div class="download-panel">
-            <div class="input-label">PASTE YOUR VIDEO LINK</div>
+        <!-- IMPORTANT: FORM ID IS REQUIRED BY SCRIPT.JS -->
+        <form class="download-panel" id="form">
+
+            <label class="input-label" for="url">
+                PASTE YOUR VIDEO LINK
+            </label>
 
             <div class="input-wrap">
                 <span class="link-icon">🔗</span>
+
                 <input
                     type="url"
                     id="url"
+                    name="url"
                     placeholder="https://www.example.com/video..."
                     autocomplete="url"
                     required
                 >
             </div>
 
-            <button id="downloadBtn" type="submit" form="downloadForm">
+            <button id="downloadBtn" type="submit">
                 <span>↓</span> Download Now
             </button>
 
             <p id="msg" aria-live="polite">
                 🔒 No account required. Paste a public link to get started.
             </p>
-        </div>
+
+        </form>
 
         <div class="trust-line">
             <span>✓ Free to use</span>
             <span>✓ Mobile friendly</span>
             <span>✓ Simple and fast</span>
         </div>
+
     </section>
 
+    <!-- SUPPORTED PLATFORMS -->
     <section class="platform-section">
+
         <div class="section-heading">
             <span class="eyebrow">SUPPORTED PLATFORMS</span>
             <h2>One Tool, Many Platforms</h2>
@@ -83,6 +99,7 @@
         </div>
 
         <div class="platform-grid">
+
             <div class="platform-card">
                 <div class="platform-icon youtube">▶</div>
                 <strong>YouTube</strong>
@@ -118,10 +135,13 @@
                 <strong>Snapchat</strong>
                 <small>Public content</small>
             </div>
+
         </div>
     </section>
 
+    <!-- FEATURES -->
     <section class="features-section">
+
         <div class="section-heading">
             <span class="eyebrow">WHY LINKDROP PRO</span>
             <h2>Everything Made Simple</h2>
@@ -129,6 +149,7 @@
         </div>
 
         <div class="feature-grid">
+
             <article class="feature-card">
                 <div class="feature-icon">⚡</div>
                 <h3>Fast Downloads</h3>
@@ -152,10 +173,13 @@
                 <h3>Simple & Secure</h3>
                 <p>No account or password is required to use the downloader.</p>
             </article>
+
         </div>
     </section>
 
+    <!-- RECENT LINKS -->
     <section class="recent-section">
+
         <div class="section-heading">
             <span class="eyebrow">YOUR ACTIVITY</span>
             <h2>Recent Links</h2>
@@ -163,14 +187,15 @@
         </div>
 
         <div class="recent-box">
-            <ul id="list">
-                <li class="empty-history">No recent links yet.</li>
-            </ul>
+            <ul id="list"></ul>
             <button id="clear" type="button">Clear History</button>
         </div>
+
     </section>
 
+    <!-- FAQ -->
     <section class="faq-section">
+
         <div class="section-heading">
             <span class="eyebrow">HELP CENTER</span>
             <h2>Frequently Asked Questions</h2>
@@ -178,6 +203,7 @@
         </div>
 
         <div class="faq-list">
+
             <details class="faq-item">
                 <summary>What is LinkDrop Pro?</summary>
                 <p>LinkDrop Pro is an online tool designed to process supported public media links.</p>
@@ -190,12 +216,12 @@
 
             <details class="faq-item">
                 <summary>Which platforms are supported?</summary>
-                <p>LinkDrop Pro is designed for supported links from platforms such as YouTube, TikTok, Facebook, Instagram, X and Snapchat. Availability may vary.</p>
+                <p>LinkDrop Pro is designed for supported links from YouTube, TikTok, Facebook, Instagram, X and Snapchat. Availability may vary.</p>
             </details>
 
             <details class="faq-item">
                 <summary>Is LinkDrop Pro free?</summary>
-                <p>LinkDrop Pro is available to use without creating an account. Internet and data charges may apply.</p>
+                <p>LinkDrop Pro is available without creating an account. Internet and data charges may apply.</p>
             </details>
 
             <details class="faq-item">
@@ -210,16 +236,18 @@
 
             <details class="faq-item">
                 <summary>Can I use it on my phone?</summary>
-                <p>Yes. The website is designed to work on mobile phones, tablets and desktop devices.</p>
+                <p>Yes. The website is designed for mobile phones, tablets and desktop devices.</p>
             </details>
 
             <details class="faq-item">
                 <summary>Can I download private videos?</summary>
                 <p>No. LinkDrop Pro is intended for publicly accessible content. Respect copyright and platform rules.</p>
             </details>
+
         </div>
     </section>
 
+    <!-- DISCLAIMER -->
     <section class="disclaimer">
         <strong>Important:</strong>
         Only download content you own or have permission to download.
@@ -236,5 +264,6 @@
 </footer>
 
 <script src="script.js"></script>
+
 </body>
 </html>
