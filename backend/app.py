@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import threading
 import time
+import re
 import yt_dlp
 
 app = Flask(__name__)
@@ -156,6 +157,19 @@ def clean_filename(name):
 
     name = str(name).strip()
 
+    # Strip common leading social-media engagement metadata,
+    # e.g. "12K views · 691 reactions | Actual video title".
+    name = re.sub(
+        r"^\s*[\d.,]+\s*[KMB]?\s+views?\s*[·•|｜]\s*"
+        r"[\d.,]+\s*[KMB]?\s*(?:reactions?|likes?)\s*[|｜]\s*",
+        "",
+        name,
+        flags=re.IGNORECASE
+    )
+
+    # Remove hashtags and everything after the first hashtag.
+    name = name.split("#", 1)[0].strip()
+
     invalid_chars = '<>:"/\\|?*'
 
     for char in invalid_chars:
@@ -164,6 +178,7 @@ def clean_filename(name):
             "_"
         )
 
+    # Remove control characters.
     name = "".join(
         char
         for char in name
@@ -180,13 +195,17 @@ def clean_filename(name):
 
     name = " ".join(
         name.split()
-    )
+    ).strip(" .")
 
-    name = name[:180].strip()
+    if not name:
+        name = "download"
 
-    name = name.rstrip(
-        ". "
-    )
+    # Linux filename limit is 255 bytes, not 255 characters.
+    # Keep a generous safety margin for UTF-8 Urdu/Arabic titles.
+    while len(name.encode("utf-8")) > 150:
+        name = name[:-1]
+
+    name = name.rstrip(" .")
 
     if not name:
         return "download"
@@ -274,10 +293,6 @@ def get_format_size(fmt):
     if not fmt:
         return None, False
 
-    # ---------------------------------------------
-    # Exact filesize
-    # ---------------------------------------------
-
     filesize = fmt.get(
         "filesize"
     )
@@ -294,10 +309,6 @@ def get_format_size(fmt):
         except Exception:
             pass
 
-    # ---------------------------------------------
-    # Approximate filesize from yt-dlp
-    # ---------------------------------------------
-
     filesize_approx = fmt.get(
         "filesize_approx"
     )
@@ -313,10 +324,6 @@ def get_format_size(fmt):
 
         except Exception:
             pass
-
-    # ---------------------------------------------
-    # Calculate from bitrate × duration
-    # ---------------------------------------------
 
     tbr = fmt.get(
         "tbr"
@@ -481,21 +488,13 @@ def get_video_formats(
 
 def fallback_bitrate(height):
 
-    # Approximate total video bitrate.
-    #
-    # These are only used when yt-dlp does not provide
-    # filesize or bitrate information.
-
     if height <= 480:
-
         return 1500 * 1000
 
     if height <= 720:
-
         return 3000 * 1000
 
     if height <= 1080:
-
         return 5000 * 1000
 
     return 8000 * 1000
@@ -521,11 +520,6 @@ def estimate_video_size(
     if not video_formats:
         return None, True
 
-    # ---------------------------------------------
-    # Pick highest available video quality
-    # under requested resolution
-    # ---------------------------------------------
-
     video_formats.sort(
         key=lambda item: (
             item["height"],
@@ -546,12 +540,7 @@ def estimate_video_size(
         selected["approximate"]
     )
 
-    # ---------------------------------------------
-    # If actual/approximate filesize exists
-    # ---------------------------------------------
-
     if video_size is not None:
-
         total = video_size
 
     else:
@@ -567,10 +556,6 @@ def estimate_video_size(
         )
 
         approximate = True
-
-    # ---------------------------------------------
-    # Add best available audio
-    # ---------------------------------------------
 
     audio_formats = get_audio_formats(
         info
@@ -599,7 +584,6 @@ def estimate_video_size(
 
         else:
 
-            # Typical audio fallback
             audio_bitrate = (
                 128 * 1000
             )
@@ -614,8 +598,6 @@ def estimate_video_size(
 
     else:
 
-        # Audio unavailable in metadata,
-        # use conservative fallback.
         audio_bitrate = (
             128 * 1000
         )
@@ -643,10 +625,6 @@ def calculate_best_size(info):
 
     best_size = None
     approximate = False
-
-    # ---------------------------------------------
-    # Complete video+audio formats
-    # ---------------------------------------------
 
     for fmt in formats:
 
@@ -688,10 +666,6 @@ def calculate_best_size(info):
 
             best_size = size
             approximate = is_approx
-
-    # ---------------------------------------------
-    # Separate video + audio
-    # ---------------------------------------------
 
     video_formats = get_video_formats(
         info,
@@ -1015,10 +989,6 @@ def api_info():
             "thumbnail"
         )
 
-        # ---------------------------------------------
-        # RESOLUTION SIZES
-        # ---------------------------------------------
-
         size_480, approx_480 = (
             estimate_video_size(
                 info,
@@ -1214,10 +1184,6 @@ def api_download():
 
         }), 400
 
-    # =====================================================
-    # JOB DIRECTORY
-    # =====================================================
-
     job_id = uuid.uuid4().hex
 
     job_dir = (
@@ -1229,10 +1195,6 @@ def api_download():
         parents=True,
         exist_ok=True
     )
-
-    # =====================================================
-    # FORMAT
-    # =====================================================
 
     is_audio = quality in (
         "mp3",
@@ -1284,13 +1246,11 @@ def api_download():
             choose_video_format()
         )
 
-    # =====================================================
-    # OUTPUT
-    # =====================================================
-
+    # Use a short temporary ID as the server-side filename.
+    # The final attachment is renamed to the cleaned video title below.
     output_template = str(
         job_dir
-        / "%(title).180s.%(ext)s"
+        / "%(id)s.%(ext)s"
     )
 
     opts = get_common_ydl_opts()
@@ -1317,10 +1277,6 @@ def api_download():
 
     })
 
-    # =====================================================
-    # MP3
-    # =====================================================
-
     if is_audio:
 
         opts.update({
@@ -1346,10 +1302,6 @@ def api_download():
             ]
 
         })
-
-    # =====================================================
-    # DOWNLOAD
-    # =====================================================
 
     try:
 
@@ -1418,10 +1370,8 @@ def api_download():
 
                 file_path = files[0]
 
-        # =================================================
-        # REAL TITLE
-        # =================================================
-
+        # Use the original title, cleaned of hashtags and
+        # leading engagement metadata, as the final filename.
         title = clean_filename(
             info.get(
                 "title"
@@ -1466,10 +1416,6 @@ def api_download():
             "FINAL DOWNLOAD FILE:",
             file_path.name
         )
-
-        # =================================================
-        # SEND
-        # =================================================
 
         response = send_file(
 
