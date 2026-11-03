@@ -7,6 +7,8 @@ import logging
 import threading
 import subprocess
 import tempfile
+import socket
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -45,50 +47,80 @@ def find_bgutil_server():
         Path(__file__).resolve().parent.parent / "bgutil-ytdlp-pot-provider" / "server",
         Path.cwd() / "bgutil-ytdlp-pot-provider" / "server",
         Path("/opt/render/project/src/bgutil-ytdlp-pot-provider/server"),
-        Path("/opt/render/bgutil-ytdlp-pot-provider/server"),
     ]
 
     for folder in possible_paths:
-        if (folder / "build" / "main.js").exists():
+        if (folder / "build" / "main.js").is_file():
             return folder
 
     return None
+
+
+def check_bgutil_port():
+    try:
+        with socket.create_connection(("127.0.0.1", BGUTIL_PORT), timeout=2):
+            return True
+    except OSError:
+        return False
 
 
 def start_bgutil():
     global bgutil_process
 
     with bgutil_lock:
-        if bgutil_process and bgutil_process.poll() is None:
+        if check_bgutil_port():
+            logger.info("[BGUTIL] Server already responding")
             return
 
         server_dir = find_bgutil_server()
 
         if not server_dir:
-            logger.error("[BGUTIL] server/build/main.js not found")
+            logger.error("[BGUTIL] build/main.js NOT FOUND")
             return
 
         node_path = shutil.which("node")
 
         if not node_path:
-            logger.error("[BGUTIL] Node.js executable not found")
+            logger.error("[BGUTIL] Node.js NOT FOUND")
             return
 
-        command = [node_path, "build/main.js"]
+        log_file = open("/tmp/bgutil.log", "a", buffering=1)
+
+        command = [
+            node_path,
+            "build/main.js",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(BGUTIL_PORT),
+        ]
 
         try:
+            logger.info("[BGUTIL] Directory: %s", server_dir)
+            logger.info("[BGUTIL] Node: %s", node_path)
+
             bgutil_process = subprocess.Popen(
                 command,
                 cwd=str(server_dir),
-                stdout=subprocess.DEVNULL,
+                stdout=log_file,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
 
-            logger.info("[BGUTIL] Server starting at %s", BGUTIL_URL)
+            time.sleep(2)
+
+            if bgutil_process.poll() is not None:
+                logger.error(
+                    "[BGUTIL] Process exited: %s",
+                    bgutil_process.returncode
+                )
+            elif check_bgutil_port():
+                logger.info("[BGUTIL] Server is READY on port %s", BGUTIL_PORT)
+            else:
+                logger.error("[BGUTIL] Process running but port is not responding")
 
         except Exception:
-            logger.exception("[BGUTIL] Could not start server")
+            logger.exception("[BGUTIL] Startup failed")
 
 
 start_bgutil()
@@ -189,15 +221,26 @@ def health():
         and os.access(DENO_PATH, os.X_OK)
     )
 
-    bgutil_ready = (
-        bgutil_process is not None
-        and bgutil_process.poll() is None
-    )
+    bgutil_ready = check_bgutil_port()
+
+    try:
+        with open("/tmp/bgutil.log", "r") as f:
+            bgutil_logs = f.read()[-2500:]
+    except Exception:
+        bgutil_logs = "No BGUTIL log file"
 
     return jsonify({
         "status": "online",
         "deno": deno_ready,
         "bgutil": bgutil_ready,
+        "node": shutil.which("node") is not None,
+        "bgutil_pid": (
+            bgutil_process.pid if bgutil_process else None
+        ),
+        "bgutil_exit_code": (
+            bgutil_process.poll() if bgutil_process else None
+        ),
+        "bgutil_logs": bgutil_logs,
     })
 
 
