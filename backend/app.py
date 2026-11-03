@@ -835,8 +835,10 @@ def get_common_ydl_opts():
             "youtube": {
 
                 "player_client": [
-                    "mweb"
-                ]
+    "mweb",
+    "default"
+]
+                
 
             },
 
