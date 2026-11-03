@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from pathlib import Path
@@ -12,135 +13,91 @@ import re
 import yt_dlp
 
 app = Flask(__name__)
-
-CORS(
-    app,
-    expose_headers=["Content-Disposition"]
-)
+CORS(app, expose_headers=["Content-Disposition"])
 
 # =========================================================
 # DIRECTORIES
 # =========================================================
 
 APP_DIR = Path(__file__).resolve().parent
-
-DOWNLOAD_BASE = (
-    Path(tempfile.gettempdir())
-    / "linkdrop_pro"
-)
-
-DOWNLOAD_BASE.mkdir(
-    parents=True,
-    exist_ok=True
-)
+DOWNLOAD_BASE = Path(tempfile.gettempdir()) / "linkdrop_pro"
+DOWNLOAD_BASE.mkdir(parents=True, exist_ok=True)
 
 # =========================================================
 # BGUTIL PO TOKEN SERVER
 # =========================================================
 
-BGUTIL_SERVER = (
-    APP_DIR
-    / "bgutil-ytdlp-pot-provider"
-    / "server"
-)
-
-BGUTIL_BUILD = (
-    BGUTIL_SERVER
-    / "build"
-    / "main.js"
-)
-
-BGUTIL_PORT = 4416
+BGUTIL_SERVER = APP_DIR / "bgutil-ytdlp-pot-provider" / "server"
+BGUTIL_BUILD = BGUTIL_SERVER / "build" / "main.js"
+BGUTIL_PORT = int(os.environ.get("BGUTIL_PORT", "4416"))
 
 BGUTIL_PROCESS = None
+BGUTIL_LOCK = threading.Lock()
 
 
 def start_bgutil():
-
     global BGUTIL_PROCESS
 
-    if not BGUTIL_BUILD.exists():
-
-        print(
-            "BGUTIL build not found:",
-            BGUTIL_BUILD
-        )
-
-        return
-
-    if BGUTIL_PROCESS is not None:
-
-        if BGUTIL_PROCESS.poll() is None:
+    with BGUTIL_LOCK:
+        if BGUTIL_PROCESS is not None and BGUTIL_PROCESS.poll() is None:
             return
 
-    node_path = shutil.which("node")
+        if not BGUTIL_BUILD.is_file():
+            print("[BGUTIL] Build file not found:", BGUTIL_BUILD, flush=True)
+            return
 
-    if not node_path:
+        node_path = shutil.which("node")
 
-        print("Node.js not found.")
+        if not node_path:
+            print("[BGUTIL] Node.js not found.", flush=True)
+            return
 
-        return
+        try:
+            print("[BGUTIL] Starting PO Token server...", flush=True)
 
-    try:
+            proc = subprocess.Popen(
+                [
+                    node_path,
+                    str(BGUTIL_BUILD),
+                    "--port", str(BGUTIL_PORT),
+                    "--host", "127.0.0.1"
+                ],
+                cwd=str(BGUTIL_SERVER),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
 
-        print(
-            "Starting BGUTIL PO Token server..."
-        )
+            BGUTIL_PROCESS = proc
 
-        BGUTIL_PROCESS = subprocess.Popen(
-            [
-                node_path,
-                str(BGUTIL_BUILD),
-                "--port",
-                str(BGUTIL_PORT),
-                "--host",
-                "127.0.0.1",
-            ],
-            cwd=str(BGUTIL_SERVER),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
+            def read_logs(process):
+                if process.stdout:
+                    for line in process.stdout:
+                        print("[BGUTIL]", line.rstrip(), flush=True)
 
-        def read_logs():
+            threading.Thread(
+                target=read_logs,
+                args=(proc,),
+                daemon=True
+            ).start()
 
-            if BGUTIL_PROCESS is None:
-                return
+            time.sleep(2)
 
-            for line in BGUTIL_PROCESS.stdout:
-
+            if proc.poll() is None:
                 print(
-                    "[BGUTIL]",
-                    line.rstrip()
+                    f"[BGUTIL] Running on 127.0.0.1:{BGUTIL_PORT}",
+                    flush=True
+                )
+            else:
+                print(
+                    "[BGUTIL] Process exited:",
+                    proc.returncode,
+                    flush=True
                 )
 
-        threading.Thread(
-            target=read_logs,
-            daemon=True
-        ).start()
-
-        time.sleep(2)
-
-        if BGUTIL_PROCESS.poll() is None:
-
-            print(
-                "BGUTIL PO Token server is running "
-                f"on 127.0.0.1:{BGUTIL_PORT}"
-            )
-
-        else:
-
-            print(
-                "BGUTIL PO Token server stopped unexpectedly."
-            )
-
-    except Exception as e:
-
-        print(
-            "BGUTIL start error:",
-            repr(e)
-        )
+        except Exception as exc:
+            print("[BGUTIL START ERROR]", repr(exc), flush=True)
 
 
 start_bgutil()
@@ -149,16 +106,12 @@ start_bgutil()
 # HELPERS
 # =========================================================
 
-
 def clean_filename(name):
-
     if not name:
         return "download"
 
     name = str(name).strip()
 
-    # Strip common leading social-media engagement metadata,
-    # e.g. "12K views · 691 reactions | Actual video title".
     name = re.sub(
         r"^\s*[\d.,]+\s*[KMB]?\s+views?\s*[·•|｜]\s*"
         r"[\d.,]+\s*[KMB]?\s*(?:reactions?|likes?)\s*[|｜]\s*",
@@ -167,746 +120,354 @@ def clean_filename(name):
         flags=re.IGNORECASE
     )
 
-    # Remove hashtags and everything after the first hashtag.
     name = name.split("#", 1)[0].strip()
 
-    invalid_chars = '<>:"/\\|?*'
+    for char in '<>:"/\\|?*':
+        name = name.replace(char, "_")
 
-    for char in invalid_chars:
-        name = name.replace(
-            char,
-            "_"
-        )
-
-    # Remove control characters.
     name = "".join(
-        char
-        for char in name
+        char for char in name
         if ord(char) >= 32
     )
 
-    name = name.replace(
-        "\n",
-        " "
-    ).replace(
-        "\r",
-        " "
+    name = " ".join(
+        name.replace("\n", " ").replace("\r", " ").split()
     )
 
-    name = " ".join(
-        name.split()
-    ).strip(" .")
+    name = name.strip(" .") or "download"
 
-    if not name:
-        name = "download"
-
-    # Linux filename limit is 255 bytes, not 255 characters.
-    # Keep a generous safety margin for UTF-8 Urdu/Arabic titles.
     while len(name.encode("utf-8")) > 150:
         name = name[:-1]
 
-    name = name.rstrip(" .")
+    return name.rstrip(" .") or "download"
 
-    if not name:
-        return "download"
 
-    return name
+def valid_url(url):
+    return url.startswith(("https://", "http://"))
 
+
+def is_youtube(url):
+    url = url.lower()
+    return "youtube.com/" in url or "youtu.be/" in url
+
+
+# =========================================================
+# YT-DLP OPTIONS
+# =========================================================
+
+def get_common_ydl_opts():
+    return {
+        "quiet": False,
+        "no_warnings": False,
+        "verbose": True,
+        "noplaylist": True,
+        "socket_timeout": 30,
+        "retries": 3,
+        "fragment_retries": 3
+    }
+
+
+def get_ydl_opts(url):
+    opts = get_common_ydl_opts()
+
+    if is_youtube(url):
+        opts["extractor_args"] = {
+            "youtube": {
+                "player_client": ["mweb"]
+            },
+            "youtubepot-bgutilhttp": {
+                "base_url": f"http://127.0.0.1:{BGUTIL_PORT}"
+            }
+        }
+
+    return opts
+
+
+# =========================================================
+# FORMAT SELECTION
+# =========================================================
+
+def choose_video_format(height=None):
+    if height in (480, 720, 1080):
+        return (
+            f"bestvideo[height<={height}]+bestaudio/"
+            f"best[height<={height}]/best"
+        )
+
+    return "bestvideo*+bestaudio/best"
+
+
+def choose_audio_format():
+    return "bestaudio/best"
+
+
+def get_quality(data):
+    quality = str(
+        data.get("quality", "best")
+    ).lower().strip()
+
+    quality = {
+        "480": "480p",
+        "720": "720p",
+        "1080": "1080p"
+    }.get(quality, quality)
+
+    is_audio = quality in ("mp3", "audio")
+
+    if is_audio:
+        selector = choose_audio_format()
+    elif quality == "480p":
+        selector = choose_video_format(480)
+    elif quality == "720p":
+        selector = choose_video_format(720)
+    elif quality == "1080p":
+        selector = choose_video_format(1080)
+    else:
+        selector = choose_video_format()
+
+    return selector, is_audio
+
+
+# =========================================================
+# SIZE HELPERS
+# =========================================================
 
 def format_size(size, approximate=False):
-
     if size is None:
         return None
 
     try:
-        size = float(size)
-
-    except Exception:
+        value = float(size)
+    except (TypeError, ValueError):
         return None
 
-    if size <= 0:
+    if value <= 0:
         return None
 
-    units = [
-        "B",
-        "KB",
-        "MB",
-        "GB",
-        "TB"
-    ]
-
-    value = size
-
-    for unit in units:
-
+    for unit in ("B", "KB", "MB", "GB", "TB"):
         if value < 1024:
-
-            if unit == "B":
-
-                text = (
-                    f"{int(value)} B"
-                )
-
-            else:
-
-                text = (
-                    f"{value:.1f} {unit}"
-                )
-
-            if approximate:
-                return "~" + text
-
-            return text
+            result = (
+                f"{int(value)} B"
+                if unit == "B"
+                else f"{value:.1f} {unit}"
+            )
+            return "~" + result if approximate else result
 
         value /= 1024
 
-    text = f"{value:.1f} PB"
-
-    if approximate:
-        return "~" + text
-
-    return text
+    result = f"{value:.1f} PB"
+    return "~" + result if approximate else result
 
 
 def get_duration(info):
-
     try:
-
-        duration = info.get(
-            "duration"
-        )
-
-        if duration:
-
-            return float(
-                duration
-            )
-
-    except Exception:
-        pass
-
-    return None
+        duration = info.get("duration")
+        return float(duration) if duration else None
+    except (TypeError, ValueError):
+        return None
 
 
 def get_format_size(fmt):
-
     if not fmt:
         return None, False
 
-    filesize = fmt.get(
-        "filesize"
-    )
+    for key, approximate in (
+        ("filesize", False),
+        ("filesize_approx", True)
+    ):
+        value = fmt.get(key)
 
-    if filesize:
+        if value:
+            try:
+                return float(value), approximate
+            except (TypeError, ValueError):
+                pass
 
-        try:
-
-            return (
-                float(filesize),
-                False
-            )
-
-        except Exception:
-            pass
-
-    filesize_approx = fmt.get(
-        "filesize_approx"
-    )
-
-    if filesize_approx:
-
-        try:
-
-            return (
-                float(filesize_approx),
-                True
-            )
-
-        except Exception:
-            pass
-
-    tbr = fmt.get(
-        "tbr"
-    )
-
-    duration = fmt.get(
-        "duration"
-    )
+    tbr = fmt.get("tbr")
+    duration = fmt.get("duration")
 
     if tbr and duration:
-
         try:
-
-            size = (
-                float(tbr)
-                * 1000
-                * float(duration)
-                / 8
-            )
+            size = float(tbr) * 1000 * float(duration) / 8
 
             if size > 0:
+                return size, True
 
-                return (
-                    size,
-                    True
-                )
-
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
-    return (
-        None,
-        False
-    )
+    return None, False
 
 
-def get_audio_formats(info):
-
-    formats = (
-        info.get("formats")
-        or []
-    )
-
+def get_video_formats(info, max_height=None):
     result = []
 
-    for fmt in formats:
-
-        if not fmt:
+    for fmt in info.get("formats") or []:
+        if not fmt or fmt.get("vcodec") in (None, "none"):
             continue
-
-        acodec = fmt.get(
-            "acodec"
-        )
-
-        if not acodec:
-            continue
-
-        if acodec == "none":
-            continue
-
-        size, approximate = (
-            get_format_size(fmt)
-        )
-
-        if size is None:
-            continue
-
-        abr = fmt.get(
-            "abr"
-        )
 
         try:
-
-            abr = float(
-                abr or 0
-            )
-
-        except Exception:
-
-            abr = 0
-
-        result.append(
-            {
-                "abr": abr,
-                "size": size,
-                "approximate": approximate,
-                "format": fmt
-            }
-        )
-
-    return result
-
-
-def get_video_formats(
-    info,
-    max_height=None
-):
-
-    formats = (
-        info.get("formats")
-        or []
-    )
-
-    result = []
-
-    for fmt in formats:
-
-        if not fmt:
+            height = int(fmt.get("height") or 0)
+        except (TypeError, ValueError):
             continue
-
-        vcodec = fmt.get(
-            "vcodec"
-        )
-
-        if not vcodec:
-            continue
-
-        if vcodec == "none":
-            continue
-
-        height = fmt.get(
-            "height"
-        )
 
         if not height:
             continue
 
-        try:
-
-            height = int(
-                height
-            )
-
-        except Exception:
-
+        if max_height is not None and height > max_height:
             continue
 
-        if max_height is not None:
+        size, approximate = get_format_size(fmt)
 
-            if height > max_height:
-                continue
-
-        size, approximate = (
-            get_format_size(fmt)
-        )
-
-        result.append(
-            {
-                "height": height,
-                "size": size,
-                "approximate": approximate,
-                "format": fmt
-            }
-        )
+        result.append({
+            "height": height,
+            "size": size,
+            "approximate": approximate
+        })
 
     return result
 
 
-# =========================================================
-# FALLBACK VIDEO BITRATES
-# =========================================================
+def get_audio_formats(info):
+    result = []
 
-def fallback_bitrate(height):
-
-    if height <= 480:
-        return 1500 * 1000
-
-    if height <= 720:
-        return 3000 * 1000
-
-    if height <= 1080:
-        return 5000 * 1000
-
-    return 8000 * 1000
-
-
-def estimate_video_size(
-    info,
-    target_height
-):
-
-    duration = get_duration(
-        info
-    )
-
-    if not duration:
-        return None, True
-
-    video_formats = get_video_formats(
-        info,
-        target_height
-    )
-
-    if not video_formats:
-        return None, True
-
-    video_formats.sort(
-        key=lambda item: (
-            item["height"],
-            item["size"] or 0
-        ),
-        reverse=True
-    )
-
-    selected = (
-        video_formats[0]
-    )
-
-    video_size = (
-        selected["size"]
-    )
-
-    approximate = (
-        selected["approximate"]
-    )
-
-    if video_size is not None:
-        total = video_size
-
-    else:
-
-        bitrate = fallback_bitrate(
-            selected["height"]
-        )
-
-        total = (
-            bitrate
-            * duration
-            / 8
-        )
-
-        approximate = True
-
-    audio_formats = get_audio_formats(
-        info
-    )
-
-    if audio_formats:
-
-        audio_formats.sort(
-            key=lambda item: (
-                item["abr"],
-                item["size"]
-            ),
-            reverse=True
-        )
-
-        audio = (
-            audio_formats[0]
-        )
-
-        if audio["size"] is not None:
-
-            total += audio["size"]
-
-            if audio["approximate"]:
-                approximate = True
-
-        else:
-
-            audio_bitrate = (
-                128 * 1000
-            )
-
-            total += (
-                audio_bitrate
-                * duration
-                / 8
-            )
-
-            approximate = True
-
-    else:
-
-        audio_bitrate = (
-            128 * 1000
-        )
-
-        total += (
-            audio_bitrate
-            * duration
-            / 8
-        )
-
-        approximate = True
-
-    return (
-        total,
-        approximate
-    )
-
-
-def calculate_best_size(info):
-
-    formats = (
-        info.get("formats")
-        or []
-    )
-
-    best_size = None
-    approximate = False
-
-    for fmt in formats:
-
-        if not fmt:
+    for fmt in info.get("formats") or []:
+        if not fmt or fmt.get("acodec") in (None, "none"):
             continue
 
-        vcodec = fmt.get(
-            "vcodec"
-        )
-
-        if not vcodec:
-            continue
-
-        if vcodec == "none":
-            continue
-
-        acodec = fmt.get(
-            "acodec"
-        )
-
-        if not acodec:
-            continue
-
-        if acodec == "none":
-            continue
-
-        size, is_approx = (
-            get_format_size(fmt)
-        )
+        size, approximate = get_format_size(fmt)
 
         if size is None:
             continue
 
-        if (
-            best_size is None
-            or
-            size > best_size
-        ):
+        try:
+            abr = float(fmt.get("abr") or 0)
+        except (TypeError, ValueError):
+            abr = 0
 
-            best_size = size
-            approximate = is_approx
+        result.append({
+            "abr": abr,
+            "size": size,
+            "approximate": approximate
+        })
 
-    video_formats = get_video_formats(
-        info,
-        None
-    )
-
-    audio_formats = get_audio_formats(
-        info
-    )
-
-    if video_formats:
-
-        video_formats.sort(
-            key=lambda item: (
-                item["height"],
-                item["size"] or 0
-            ),
-            reverse=True
-        )
-
-        video = (
-            video_formats[0]
-        )
-
-        video_size = (
-            video["size"]
-        )
-
-        video_approx = (
-            video["approximate"]
-        )
-
-        if video_size is None:
-
-            duration = get_duration(
-                info
-            )
-
-            if duration:
-
-                bitrate = fallback_bitrate(
-                    video["height"]
-                )
-
-                video_size = (
-                    bitrate
-                    * duration
-                    / 8
-                )
-
-                video_approx = True
-
-        audio_size = 0
-        audio_approx = False
-
-        if audio_formats:
-
-            audio_formats.sort(
-                key=lambda item: (
-                    item["abr"],
-                    item["size"]
-                ),
-                reverse=True
-            )
-
-            audio = (
-                audio_formats[0]
-            )
-
-            if audio["size"] is not None:
-
-                audio_size = (
-                    audio["size"]
-                )
-
-                audio_approx = (
-                    audio["approximate"]
-                )
-
-            else:
-
-                duration = get_duration(
-                    info
-                )
-
-                if duration:
-
-                    audio_size = (
-                        128
-                        * 1000
-                        * duration
-                        / 8
-                    )
-
-                    audio_approx = True
-
-        if video_size is not None:
-
-            combined = (
-                video_size
-                + audio_size
-            )
-
-            if (
-                best_size is None
-                or
-                combined > best_size
-            ):
-
-                best_size = combined
-
-                approximate = (
-                    video_approx
-                    or
-                    audio_approx
-                )
-
-    return (
-        best_size,
-        approximate
-    )
+    return result
 
 
-def calculate_audio_size(info):
+def fallback_video_bitrate(height):
+    if height <= 480:
+        return 1500000
+    if height <= 720:
+        return 3000000
+    if height <= 1080:
+        return 5000000
+    return 8000000
 
-    audio_formats = get_audio_formats(
-        info
-    )
 
-    if not audio_formats:
+def estimate_video_size(info, max_height):
+    duration = get_duration(info)
+    formats = get_video_formats(info, max_height)
+
+    if not duration or not formats:
         return None, True
 
-    audio_formats.sort(
-        key=lambda item: (
-            item["abr"],
-            item["size"]
-        ),
+    formats.sort(
+        key=lambda x: (x["height"], x["size"] or 0),
         reverse=True
     )
 
-    selected = (
-        audio_formats[0]
-    )
+    video = formats[0]
+    size = video["size"]
+    approximate = video["approximate"]
 
-    return (
-        selected["size"],
-        selected["approximate"]
-    )
+    if size is None:
+        size = fallback_video_bitrate(video["height"]) * duration / 8
+        approximate = True
 
+    audios = get_audio_formats(info)
 
-# =========================================================
-# COMMON YT-DLP OPTIONS
-# =========================================================
-
-def get_common_ydl_opts():
-
-    return {
-
-        "quiet": True,
-
-        "no_warnings": True,
-
-        "noplaylist": True,
-
-        "extractor_args": {
-
-            "youtube": {
-
-                "player_client": [
-    "mweb",
-    "default"
-]
-                
-
-            },
-
-            "youtubepot-bgutilhttp": {
-
-                "base_url":
-                    f"http://127.0.0.1:{BGUTIL_PORT}"
-
-            }
-
-        }
-
-    }
-
-
-def choose_video_format(
-    height=None
-):
-
-    if height == 480:
-
-        return (
-            "bestvideo[height<=480]+bestaudio/"
-            "best[height<=480]/best"
+    if audios:
+        audios.sort(
+            key=lambda x: (x["abr"], x["size"]),
+            reverse=True
         )
 
-    if height == 720:
+        audio = audios[0]
+        size += audio["size"]
+        approximate = approximate or audio["approximate"]
 
-        return (
-            "bestvideo[height<=720]+bestaudio/"
-            "best[height<=720]/best"
-        )
+    else:
+        size += 128000 * duration / 8
+        approximate = True
 
-    if height == 1080:
+    return size, approximate
 
-        return (
-            "bestvideo[height<=1080]+bestaudio/"
-            "best[height<=1080]/best"
-        )
 
-    return (
-        "bestvideo*+bestaudio/best"
+def calculate_best_size(info):
+    duration = get_duration(info)
+    formats = get_video_formats(info)
+
+    if not formats:
+        return None, True
+
+    formats.sort(
+        key=lambda x: (x["height"], x["size"] or 0),
+        reverse=True
     )
 
+    video = formats[0]
+    size = video["size"]
+    approximate = video["approximate"]
 
-def choose_audio_format():
+    if size is None:
+        if not duration:
+            return None, True
 
-    return "bestaudio/best"
+        size = fallback_video_bitrate(video["height"]) * duration / 8
+        approximate = True
+
+    audios = get_audio_formats(info)
+
+    if audios:
+        audios.sort(
+            key=lambda x: (x["abr"], x["size"]),
+            reverse=True
+        )
+
+        audio = audios[0]
+        size += audio["size"]
+        approximate = approximate or audio["approximate"]
+
+    elif duration:
+        size += 128000 * duration / 8
+        approximate = True
+
+    return size, approximate
+
+
+def calculate_audio_size(info):
+    audios = get_audio_formats(info)
+
+    if not audios:
+        return None, True
+
+    audios.sort(
+        key=lambda x: (x["abr"], x["size"]),
+        reverse=True
+    )
+
+    return audios[0]["size"], audios[0]["approximate"]
 
 
 # =========================================================
 # HOME
 # =========================================================
 
-@app.route(
-    "/",
-    methods=["GET"]
-)
+@app.route("/", methods=["GET"])
 def home():
-
     return jsonify({
-
-        "name":
-            "LinkDrop PRO API",
-
-        "status":
-            "online"
-
+        "name": "LinkDrop PRO API",
+        "status": "online"
     })
 
 
@@ -914,216 +475,94 @@ def home():
 # INFO API
 # =========================================================
 
-@app.route(
-    "/api/info",
-    methods=["POST"]
-)
+@app.route("/api/info", methods=["POST"])
 def api_info():
-
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or {}
-    )
-
-    url = str(
-        data.get(
-            "url",
-            ""
-        )
-    ).strip()
+    data = request.get_json(silent=True) or {}
+    url = str(data.get("url", "")).strip()
 
     if not url:
-
         return jsonify({
-
-            "success":
-                False,
-
-            "error":
-                "URL is required"
-
+            "success": False,
+            "error": "URL is required"
         }), 400
 
-    if not (
-        url.startswith("http://")
-        or
-        url.startswith("https://")
-    ):
-
+    if not valid_url(url):
         return jsonify({
-
-            "success":
-                False,
-
-            "error":
-                "Invalid URL"
-
+            "success": False,
+            "error": "Invalid URL"
         }), 400
 
     try:
+        opts = get_ydl_opts(url)
 
-        opts = get_common_ydl_opts()
-
-        with yt_dlp.YoutubeDL(
-            opts
-        ) as ydl:
-
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(
                 url,
                 download=False
             )
 
+        if not info:
+            raise RuntimeError("No video information returned.")
+
+        if info.get("_type") in ("playlist", "multi_video"):
+            entries = [
+                entry for entry in (info.get("entries") or [])
+                if entry
+            ]
+
+            if not entries:
+                raise RuntimeError("No playable video found.")
+
+            info = entries[0]
+
+        sizes = {}
+        sizes_bytes = {}
+
+        for key, height in (
+            ("480p", 480),
+            ("720p", 720),
+            ("1080p", 1080)
+        ):
+            size, approx = estimate_video_size(info, height)
+
+            sizes[key] = format_size(size, approx)
+            sizes_bytes[key] = size
+
+        best_size, best_approx = calculate_best_size(info)
+        mp3_size, mp3_approx = calculate_audio_size(info)
+
+        sizes["best"] = format_size(best_size, best_approx)
+        sizes["mp3"] = format_size(mp3_size, mp3_approx)
+
+        sizes_bytes["best"] = best_size
+        sizes_bytes["mp3"] = mp3_size
+
         title = clean_filename(
-            info.get(
-                "title"
-            )
-            or
-            "download"
+            info.get("title") or "download"
         )
 
-        duration = info.get(
-            "duration"
-        )
-
-        thumbnail = info.get(
-            "thumbnail"
-        )
-
-        size_480, approx_480 = (
-            estimate_video_size(
-                info,
-                480
-            )
-        )
-
-        size_720, approx_720 = (
-            estimate_video_size(
-                info,
-                720
-            )
-        )
-
-        size_1080, approx_1080 = (
-            estimate_video_size(
-                info,
-                1080
-            )
-        )
-
-        size_best, approx_best = (
-            calculate_best_size(
-                info
-            )
-        )
-
-        size_mp3, approx_mp3 = (
-            calculate_audio_size(
-                info
-            )
-        )
-
-        sizes = {
-
-            "480p":
-                format_size(
-                    size_480,
-                    approx_480
-                ),
-
-            "720p":
-                format_size(
-                    size_720,
-                    approx_720
-                ),
-
-            "1080p":
-                format_size(
-                    size_1080,
-                    approx_1080
-                ),
-
-            "best":
-                format_size(
-                    size_best,
-                    approx_best
-                ),
-
-            "mp3":
-                format_size(
-                    size_mp3,
-                    approx_mp3
-                )
-
-        }
-
-        sizes_bytes = {
-
-            "480p":
-                size_480,
-
-            "720p":
-                size_720,
-
-            "1080p":
-                size_1080,
-
-            "best":
-                size_best,
-
-            "mp3":
-                size_mp3
-
-        }
-
-        print(
-            "INFO TITLE:",
-            title
-        )
-
-        print(
-            "INFO SIZES:",
-            sizes
-        )
+        print("[INFO SUCCESS]", title, flush=True)
 
         return jsonify({
-
-            "success":
-                True,
-
-            "title":
-                title,
-
-            "duration":
-                duration,
-
-            "thumbnail":
-                thumbnail,
-
-            "sizes":
-                sizes,
-
-            "sizes_bytes":
-                sizes_bytes
-
+            "success": True,
+            "title": title,
+            "duration": info.get("duration"),
+            "thumbnail": info.get("thumbnail"),
+            "sizes": sizes,
+            "sizes_bytes": sizes_bytes
         })
 
-    except Exception as e:
-
+    except Exception as exc:
         print(
-            "INFO ERROR:",
-            repr(e)
+            "[INFO ERROR]",
+            type(exc).__name__,
+            repr(exc),
+            flush=True
         )
 
         return jsonify({
-
-            "success":
-                False,
-
-            "error":
-                str(e)
-
+            "success": False,
+            "error": str(exc)
         }), 500
 
 
@@ -1131,396 +570,170 @@ def api_info():
 # DOWNLOAD API
 # =========================================================
 
-@app.route(
-    "/api/download",
-    methods=["POST"]
-)
+@app.route("/api/download", methods=["POST"])
 def api_download():
-
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or {}
-    )
-
-    url = str(
-        data.get(
-            "url",
-            ""
-        )
-    ).strip()
-
-    quality = str(
-        data.get(
-            "quality",
-            "best"
-        )
-    ).lower()
+    data = request.get_json(silent=True) or {}
+    url = str(data.get("url", "")).strip()
 
     if not url:
-
         return jsonify({
-
-            "success":
-                False,
-
-            "error":
-                "URL is required"
-
+            "success": False,
+            "error": "URL is required"
         }), 400
 
-    if not (
-        url.startswith("http://")
-        or
-        url.startswith("https://")
-    ):
-
+    if not valid_url(url):
         return jsonify({
-
-            "success":
-                False,
-
-            "error":
-                "Invalid URL"
-
+            "success": False,
+            "error": "Invalid URL"
         }), 400
 
-    job_id = uuid.uuid4().hex
+    format_selector, is_audio = get_quality(data)
 
-    job_dir = (
-        DOWNLOAD_BASE
-        / job_id
-    )
+    job_dir = DOWNLOAD_BASE / uuid.uuid4().hex
+    job_dir.mkdir(parents=True, exist_ok=True)
 
-    job_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    is_audio = quality in (
-        "mp3",
-        "audio"
-    )
-
-    if quality == "480":
-        quality = "480p"
-
-    elif quality == "720":
-        quality = "720p"
-
-    elif quality == "1080":
-        quality = "1080p"
-
-    if quality == "480p":
-
-        format_selector = (
-            choose_video_format(
-                480
-            )
-        )
-
-    elif quality == "720p":
-
-        format_selector = (
-            choose_video_format(
-                720
-            )
-        )
-
-    elif quality == "1080p":
-
-        format_selector = (
-            choose_video_format(
-                1080
-            )
-        )
-
-    elif is_audio:
-
-        format_selector = (
-            choose_audio_format()
-        )
-
-    else:
-
-        format_selector = (
-            choose_video_format()
-        )
-
-    # Use a short temporary ID as the server-side filename.
-    # The final attachment is renamed to the cleaned video title below.
-    output_template = str(
-        job_dir
-        / "%(id)s.%(ext)s"
-    )
-
-    opts = get_common_ydl_opts()
+    opts = get_ydl_opts(url)
 
     opts.update({
-
-        "format":
-            format_selector,
-
-        "outtmpl":
-            output_template,
-
-        "restrictfilenames":
-            False,
-
-        "windowsfilenames":
-            True,
-
-        "merge_output_format":
-            "mp4",
-
-        "overwrites":
-            True
-
+        "format": format_selector,
+        "outtmpl": str(job_dir / "%(id)s.%(ext)s"),
+        "windowsfilenames": True,
+        "overwrites": True
     })
 
     if is_audio:
-
         opts.update({
-
-            "format":
-                "bestaudio/best",
-
-            "postprocessors": [
-
-                {
-
-                    "key":
-                        "FFmpegExtractAudio",
-
-                    "preferredcodec":
-                        "mp3",
-
-                    "preferredquality":
-                        "192"
-
-                }
-
-            ]
-
+            "format": "bestaudio/best",
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192"
+            }]
         })
 
+    else:
+        # yt-dlp merges separate video/audio streams to MP4.
+        # A single-file source keeps its native extension.
+        opts["merge_output_format"] = "mp4"
+
     try:
-
-        with yt_dlp.YoutubeDL(
-            opts
-        ) as ydl:
-
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(
                 url,
                 download=True
             )
 
-        files = [
+        if not info:
+            raise RuntimeError("No video information returned.")
 
-            p
-            for p in job_dir.iterdir()
-            if p.is_file()
+        if info.get("_type") in ("playlist", "multi_video"):
+            entries = [
+                entry for entry in (info.get("entries") or [])
+                if entry
+            ]
 
+            if entries:
+                info = entries[0]
+
+        downloaded_files = [
+            path for path in job_dir.iterdir()
+            if path.is_file()
         ]
 
-        if not files:
-
-            raise RuntimeError(
-                "Downloaded file was not found."
-            )
+        if not downloaded_files:
+            raise RuntimeError("Downloaded file was not found.")
 
         if is_audio:
-
-            mp3_files = [
-
-                p
-                for p in files
-                if p.suffix.lower()
-                == ".mp3"
-
+            candidates = [
+                path for path in downloaded_files
+                if path.suffix.lower() == ".mp3"
             ]
-
-            if mp3_files:
-
-                file_path = (
-                    mp3_files[0]
-                )
-
-            else:
-
-                file_path = files[0]
-
         else:
-
-            mp4_files = [
-
-                p
-                for p in files
-                if p.suffix.lower()
-                == ".mp4"
-
+            candidates = [
+                path for path in downloaded_files
+                if path.suffix.lower() in (
+                    ".mp4", ".mkv", ".webm",
+                    ".mov", ".m4v"
+                )
             ]
 
-            if mp4_files:
+        file_path = max(
+            candidates or downloaded_files,
+            key=lambda path: path.stat().st_size
+        )
 
-                file_path = (
-                    mp4_files[0]
-                )
-
-            else:
-
-                file_path = files[0]
-
-        # Use the original title, cleaned of hashtags and
-        # leading engagement metadata, as the final filename.
         title = clean_filename(
-            info.get(
-                "title"
-            )
-            or
-            file_path.stem
-            or
-            "download"
+            info.get("title") or file_path.stem
         )
 
-        extension = (
-            file_path.suffix
+        final_path = job_dir / (
+            title + file_path.suffix.lower()
         )
 
-        final_name = (
-            f"{title}{extension}"
-        )
-
-        final_path = (
-            job_dir
-            / final_name
-        )
-
-        if (
-            file_path.resolve()
-            !=
-            final_path.resolve()
-        ):
-
+        if file_path.resolve() != final_path.resolve():
             if final_path.exists():
                 final_path.unlink()
 
-            file_path.rename(
-                final_path
-            )
-
-            file_path = (
-                final_path
-            )
+            file_path.rename(final_path)
+            file_path = final_path
 
         print(
-            "FINAL DOWNLOAD FILE:",
-            file_path.name
+            "[DOWNLOAD COMPLETE]",
+            file_path.name,
+            flush=True
         )
 
         response = send_file(
-
             file_path,
-
             as_attachment=True,
-
-            download_name=
-                file_path.name
-
+            download_name=file_path.name
         )
 
         @response.call_on_close
         def cleanup():
-
-            try:
-
-                for item in job_dir.iterdir():
-
-                    try:
-                        item.unlink()
-
-                    except Exception:
-                        pass
-
-                try:
-                    job_dir.rmdir()
-
-                except Exception:
-                    pass
-
-            except Exception as e:
-
-                print(
-                    "Cleanup error:",
-                    repr(e)
-                )
+            shutil.rmtree(
+                job_dir,
+                ignore_errors=True
+            )
 
         return response
 
-    except Exception as e:
-
+    except Exception as exc:
         print(
-            "DOWNLOAD ERROR:",
-            repr(e)
+            "[DOWNLOAD ERROR]",
+            type(exc).__name__,
+            repr(exc),
+            flush=True
         )
 
-        try:
-
-            for item in job_dir.iterdir():
-
-                try:
-                    item.unlink()
-
-                except Exception:
-                    pass
-
-            job_dir.rmdir()
-
-        except Exception:
-            pass
+        shutil.rmtree(
+            job_dir,
+            ignore_errors=True
+        )
 
         return jsonify({
-
-            "success":
-                False,
-
-            "error":
-                str(e)
-
+            "success": False,
+            "error": str(exc)
         }), 500
 
 
 # =========================================================
-# HEALTH
+# HEALTH CHECK
 # =========================================================
 
-@app.route(
-    "/health",
-    methods=["GET"]
-)
+@app.route("/health", methods=["GET"])
 def health():
-
-    bgutil_status = False
-
-    if BGUTIL_PROCESS is not None:
-
-        bgutil_status = (
-            BGUTIL_PROCESS.poll()
-            is None
-        )
+    running = (
+        BGUTIL_PROCESS is not None
+        and BGUTIL_PROCESS.poll() is None
+    )
 
     return jsonify({
-
-        "status":
-            "ok",
-
-        "bgutil":
-            bgutil_status,
-
-        "service":
-            "LinkDrop PRO"
-
+        "status": "ok",
+        "bgutil_process_running": running,
+        "bgutil_port": BGUTIL_PORT,
+        "yt_dlp_version": yt_dlp.version.__version__,
+        "service": "LinkDrop PRO"
     })
 
 
@@ -1529,13 +742,7 @@ def health():
 # =========================================================
 
 if __name__ == "__main__":
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            "5000"
-        )
-    )
+    port = int(os.environ.get("PORT", "5000"))
 
     app.run(
         host="0.0.0.0",
