@@ -210,9 +210,10 @@ def make_ydl_options(extra_options=None, source_url=None):
 
     # Snapchat browser impersonation
     if source_url and is_snapchat_url(source_url):
-        options["impersonate"] = "chrome"
-        logger.info("[SNAPCHAT] Chrome impersonation enabled")
-
+    logger.info(
+        "[SNAPCHAT] Using default HTTP client; "
+        "invalid impersonation option disabled"
+    )
     if extra_options:
         options.update(extra_options)
 
