@@ -216,6 +216,7 @@ def home():
 
 @app.route("/health", methods=["GET"])
 def health():
+    logger.info("LINKDROP HEALTH VERSION: NEW BGUTIL DIAGNOSTICS")
     deno_ready = (
         os.path.isfile(DENO_PATH)
         and os.access(DENO_PATH, os.X_OK)
