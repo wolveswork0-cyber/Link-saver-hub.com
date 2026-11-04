@@ -86,14 +86,7 @@ def start_bgutil():
 
         log_file = open("/tmp/bgutil.log", "a", buffering=1)
 
-        command = [
-            node_path,
-            "build/main.js",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(BGUTIL_PORT),
-        ]
+        command = [node_path, "build/main.js"]
 
         try:
             logger.info("[BGUTIL] Directory: %s", server_dir)
