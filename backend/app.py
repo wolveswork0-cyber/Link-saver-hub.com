@@ -32,12 +32,9 @@ logger = logging.getLogger("LinkDropPro")
 BASE_DIR = Path(tempfile.gettempdir()) / "linkdrop_pro"
 BASE_DIR.mkdir(parents=True, exist_ok=True)
 
-DENO_PATH = "/opt/render/.deno/bin/deno"
-
-BGUTIL_PORT = 4416
 BGUTIL_HOST = "127.0.0.1"
+BGUTIL_PORT = 4416
 BGUTIL_URL = f"http://{BGUTIL_HOST}:{BGUTIL_PORT}"
-
 BGUTIL_LOG = "/tmp/bgutil.log"
 
 bgutil_process = None
@@ -45,10 +42,90 @@ bgutil_lock = threading.Lock()
 
 
 # --------------------------------------------------
+# DENO DETECTION
+# --------------------------------------------------
+
+def find_deno():
+
+    possible_paths = [
+        os.environ.get("DENO_PATH"),
+        shutil.which("deno"),
+        "/opt/render/.deno/bin/deno",
+        "/opt/render/project/.deno/bin/deno",
+        "/opt/render/project/src/.deno/bin/deno",
+        str(Path.home() / ".deno" / "bin" / "deno"),
+        "/usr/local/bin/deno",
+    ]
+
+    checked = []
+
+    for path in possible_paths:
+
+        if not path or path in checked:
+            continue
+
+        checked.append(path)
+
+        try:
+            deno_file = Path(path)
+
+            if deno_file.is_file():
+
+                if not os.access(path, os.X_OK):
+                    try:
+                        os.chmod(path, 0o755)
+                    except OSError:
+                        pass
+
+                if os.access(path, os.X_OK):
+
+                    os.environ["PATH"] = (
+                        str(deno_file.parent)
+                        + os.pathsep
+                        + os.environ.get("PATH", "")
+                    )
+
+                    result = subprocess.run(
+                        [path, "--version"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+
+                    if result.returncode == 0:
+                        logger.info(
+                            "[DENO] Found: %s",
+                            path
+                        )
+                        logger.info(
+                            "[DENO] Version: %s",
+                            result.stdout.strip().splitlines()[0]
+                        )
+                        return path
+
+                    logger.warning(
+                        "[DENO] Version check failed: %s",
+                        result.stderr[-1000:]
+                    )
+
+        except Exception:
+            logger.exception("[DENO] Detection error for %s", path)
+
+    logger.error("[DENO] No working Deno executable found")
+    logger.info("[DENO] PATH: %s", os.environ.get("PATH"))
+
+    return None
+
+
+DENO_PATH = find_deno()
+
+
+# --------------------------------------------------
 # BGUTIL SERVER
 # --------------------------------------------------
 
 def find_bgutil_server():
+
     possible_paths = [
         Path(__file__).resolve().parent
         / "bgutil-ytdlp-pot-provider" / "server",
@@ -59,10 +136,14 @@ def find_bgutil_server():
         Path.cwd()
         / "bgutil-ytdlp-pot-provider" / "server",
 
-        Path("/opt/render/project/src/backend/bgutil-ytdlp-pot-provider/server"),
+        Path(
+            "/opt/render/project/src/backend/"
+            "bgutil-ytdlp-pot-provider/server"
+        ),
     ]
 
     for folder in possible_paths:
+
         if (folder / "build" / "main.js").is_file():
             return folder
 
@@ -70,17 +151,20 @@ def find_bgutil_server():
 
 
 def check_bgutil_port():
+
     try:
         with socket.create_connection(
             (BGUTIL_HOST, BGUTIL_PORT),
             timeout=2
         ):
             return True
+
     except OSError:
         return False
 
 
 def start_bgutil():
+
     global bgutil_process
 
     with bgutil_lock:
@@ -88,9 +172,6 @@ def start_bgutil():
         if check_bgutil_port():
             logger.info("[BGUTIL] Server already responding")
             return True
-
-        if bgutil_process and bgutil_process.poll() is None:
-            logger.warning("[BGUTIL] Process exists but port is not responding")
 
         server_dir = find_bgutil_server()
 
@@ -113,9 +194,10 @@ def start_bgutil():
 
         logger.info("[BGUTIL] Directory: %s", server_dir)
         logger.info("[BGUTIL] Node: %s", node_path)
-        logger.info("[BGUTIL] Starting command: %s", command)
+        logger.info("[BGUTIL] Command: %s", command)
 
         try:
+
             with open(BGUTIL_LOG, "a", buffering=1) as log_file:
 
                 bgutil_process = subprocess.Popen(
@@ -131,8 +213,8 @@ def start_bgutil():
                 bgutil_process.pid
             )
 
-            # Give the server time to initialize.
             for attempt in range(15):
+
                 time.sleep(1)
 
                 if check_bgutil_port():
@@ -145,23 +227,25 @@ def start_bgutil():
                 exit_code = bgutil_process.poll()
 
                 if exit_code is not None:
+
                     logger.error(
-                        "[BGUTIL] Process exited with code: %s",
+                        "[BGUTIL] Process exited: %s",
                         exit_code
                     )
                     break
 
-            logger.error("[BGUTIL] Server did not open port %s", BGUTIL_PORT)
-
             try:
+
                 with open(BGUTIL_LOG, "r") as log_file:
                     logger.error(
-                        "[BGUTIL] Server logs:\n%s",
+                        "[BGUTIL] Logs:\n%s",
                         log_file.read()[-4000:]
                     )
-            except Exception:
-                logger.exception("[BGUTIL] Could not read server log")
 
+            except Exception:
+                logger.exception("[BGUTIL] Log read failed")
+
+            logger.error("[BGUTIL] Port is not responding")
             return False
 
         except Exception:
@@ -169,7 +253,6 @@ def start_bgutil():
             return False
 
 
-# Start BGUTIL when this Gunicorn worker loads the app.
 start_bgutil()
 
 
@@ -178,35 +261,43 @@ start_bgutil()
 # --------------------------------------------------
 
 def validate_url(url):
+
     if not url or not isinstance(url, str):
         return False
 
     try:
+
         parsed = urlparse(url.strip())
 
         return (
             parsed.scheme in ("http", "https")
             and bool(parsed.netloc)
         )
+
     except Exception:
         return False
 
 
 def clean_filename(name):
+
     name = str(name or "LinkDrop_download")
     name = re.sub(r'[\\/*?:"<>|]', "", name)
     name = re.sub(r"\s+", " ", name).strip()
+
     return name[:150] or "LinkDrop_download"
 
 
 def format_size(size):
+
     if not size:
         return "Unknown"
 
     try:
+
         size = float(size)
 
         for unit in ["B", "KB", "MB", "GB", "TB"]:
+
             if size < 1024 or unit == "TB":
                 return f"{size:.2f} {unit}"
 
@@ -217,6 +308,10 @@ def format_size(size):
 
     return "Unknown"
 
+
+# --------------------------------------------------
+# YT-DLP OPTIONS
+# --------------------------------------------------
 
 def make_ydl_options(extra_options=None):
 
@@ -241,17 +336,27 @@ def make_ydl_options(extra_options=None):
         "remote_components": ["ejs:npm"],
     }
 
-    if os.path.isfile(DENO_PATH) and os.access(DENO_PATH, os.X_OK):
+    # Configure Deno JavaScript runtime.
+
+    if DENO_PATH:
+
         options["js_runtimes"] = {
             "deno": {
                 "path": DENO_PATH,
             }
         }
 
-        logger.info("[DENO] Runtime configured")
+        logger.info(
+            "[DENO] Runtime configured: %s",
+            DENO_PATH
+        )
 
     else:
-        logger.warning("[DENO] Runtime not found: %s", DENO_PATH)
+
+        logger.warning(
+            "[DENO] Runtime unavailable. "
+            "YouTube JavaScript challenges may fail."
+        )
 
     if extra_options:
         options.update(extra_options)
@@ -260,45 +365,82 @@ def make_ydl_options(extra_options=None):
 
 
 # --------------------------------------------------
-# HOME AND HEALTH
+# HOME
 # --------------------------------------------------
 
 @app.route("/", methods=["GET"])
 def home():
+
     return jsonify({
         "name": "LinkDrop Pro API",
         "status": "online",
     })
 
 
+# --------------------------------------------------
+# HEALTH CHECK
+# --------------------------------------------------
+
 @app.route("/health", methods=["GET"])
 def health():
 
-    deno_ready = (
-        os.path.isfile(DENO_PATH)
-        and os.access(DENO_PATH, os.X_OK)
-    )
+    deno_ready = False
+    deno_version = None
+
+    if DENO_PATH:
+
+        try:
+
+            result = subprocess.run(
+                [DENO_PATH, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            deno_ready = result.returncode == 0
+
+            if deno_ready and result.stdout:
+                deno_version = result.stdout.splitlines()[0]
+
+        except Exception as error:
+            deno_version = str(error)
 
     bgutil_ready = check_bgutil_port()
 
     try:
+
         with open(BGUTIL_LOG, "r") as f:
             bgutil_logs = f.read()[-4000:]
+
     except Exception:
         bgutil_logs = "No BGUTIL log file"
 
     return jsonify({
+
         "status": "online",
+
         "deno": deno_ready,
-        "bgutil": bgutil_ready,
+        "deno_path": DENO_PATH,
+        "deno_version": deno_version,
+
         "node": shutil.which("node") is not None,
+        "node_path": shutil.which("node"),
+
+        "bgutil": bgutil_ready,
+
         "bgutil_pid": (
-            bgutil_process.pid if bgutil_process else None
+            bgutil_process.pid
+            if bgutil_process else None
         ),
+
         "bgutil_exit_code": (
-            bgutil_process.poll() if bgutil_process else None
+            bgutil_process.poll()
+            if bgutil_process else None
         ),
+
         "bgutil_logs": bgutil_logs,
+
     })
 
 
@@ -316,19 +458,24 @@ def video_info():
     url = data.get("url", "")
 
     if not validate_url(url):
+
         return jsonify({
             "success": False,
             "error": "Please enter a valid public video URL.",
         }), 400
 
     try:
+
         options = make_ydl_options({
             "skip_download": True,
             "extract_flat": False,
         })
 
         with YoutubeDL(options) as ydl:
-            info = ydl.extract_info(url.strip(), download=False)
+            info = ydl.extract_info(
+                url.strip(),
+                download=False
+            )
 
         if not info:
             raise Exception("Could not retrieve video information")
@@ -351,33 +498,45 @@ def video_info():
             )
 
             formats.append({
+
                 "format_id": item.get("format_id"),
+
                 "quality": (
                     f"{height}p"
                     if height
                     else item.get("format_note", "Video")
                 ),
+
                 "ext": item.get("ext"),
                 "filesize": filesize,
                 "filesize_text": format_size(filesize),
+
             })
 
         return jsonify({
+
             "success": True,
+
             "title": info.get("title", "Video"),
             "thumbnail": info.get("thumbnail"),
+
             "duration": info.get("duration"),
             "duration_string": info.get("duration_string"),
+
             "uploader": info.get("uploader"),
+
             "filesize": (
                 info.get("filesize")
                 or info.get("filesize_approx")
             ),
+
             "filesize_text": format_size(
                 info.get("filesize")
                 or info.get("filesize_approx")
             ),
+
             "formats": formats,
+
         })
 
     except Exception as error:
@@ -408,14 +567,17 @@ def download_video():
     audio_only = bool(data.get("audio_only", False))
 
     if not validate_url(url):
+
         return jsonify({
             "success": False,
             "error": "Please enter a valid public video URL.",
         }), 400
 
-    # Retry BGUTIL startup if it is not responding.
+    # Retry BGUTIL if the server is unavailable.
+
     if not check_bgutil_port():
-        logger.warning("[BGUTIL] Not responding; retrying startup")
+
+        logger.warning("[BGUTIL] Restarting unavailable server")
         start_bgutil()
 
     download_id = str(uuid.uuid4())
@@ -428,14 +590,17 @@ def download_video():
     )
 
     options = make_ydl_options({
+
         "outtmpl": output_template,
         "noplaylist": True,
         "overwrites": True,
+
     })
 
     if audio_only:
 
         options.update({
+
             "format": "bestaudio/best",
 
             "postprocessors": [{
@@ -443,6 +608,7 @@ def download_video():
                 "preferredcodec": "mp3",
                 "preferredquality": "192",
             }],
+
         })
 
     else:
@@ -453,6 +619,7 @@ def download_video():
             options["merge_output_format"] = "mp4"
 
         else:
+
             options["format"] = format_id
 
     try:
@@ -461,13 +628,16 @@ def download_video():
             ydl.download([url.strip()])
 
         downloaded_files = [
-            item
-            for item in download_dir.iterdir()
+
+            item for item in download_dir.iterdir()
+
             if item.is_file()
             and not item.name.endswith((".part", ".ytdl"))
+
         ]
 
         if not downloaded_files:
+
             raise Exception(
                 "Download completed but output file was not found"
             )
@@ -478,9 +648,15 @@ def download_video():
         )
 
         response = send_file(
+
             str(output_file),
+
             as_attachment=True,
-            download_name=clean_filename(output_file.name),
+
+            download_name=clean_filename(
+                output_file.name
+            ),
+
         )
 
         response.call_on_close(
@@ -502,8 +678,10 @@ def download_video():
         )
 
         return jsonify({
+
             "success": False,
             "error": str(error),
+
         }), 500
 
 
@@ -514,6 +692,9 @@ def download_video():
 if __name__ == "__main__":
 
     app.run(
+
         host="0.0.0.0",
+
         port=int(os.environ.get("PORT", 10000)),
+
     )
