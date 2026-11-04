@@ -23,15 +23,22 @@ from yt_dlp import YoutubeDL
 app = Flask(__name__)
 CORS(app)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s:%(name)s:%(message)s"
+)
 logger = logging.getLogger("LinkDropPro")
 
 BASE_DIR = Path(tempfile.gettempdir()) / "linkdrop_pro"
 BASE_DIR.mkdir(parents=True, exist_ok=True)
 
 DENO_PATH = "/opt/render/.deno/bin/deno"
+
 BGUTIL_PORT = 4416
-BGUTIL_URL = f"http://127.0.0.1:{BGUTIL_PORT}"
+BGUTIL_HOST = "127.0.0.1"
+BGUTIL_URL = f"http://{BGUTIL_HOST}:{BGUTIL_PORT}"
+
+BGUTIL_LOG = "/tmp/bgutil.log"
 
 bgutil_process = None
 bgutil_lock = threading.Lock()
@@ -43,10 +50,16 @@ bgutil_lock = threading.Lock()
 
 def find_bgutil_server():
     possible_paths = [
-        Path(__file__).resolve().parent / "bgutil-ytdlp-pot-provider" / "server",
-        Path(__file__).resolve().parent.parent / "bgutil-ytdlp-pot-provider" / "server",
-        Path.cwd() / "bgutil-ytdlp-pot-provider" / "server",
-        Path("/opt/render/project/src/bgutil-ytdlp-pot-provider/server"),
+        Path(__file__).resolve().parent
+        / "bgutil-ytdlp-pot-provider" / "server",
+
+        Path(__file__).resolve().parent.parent
+        / "bgutil-ytdlp-pot-provider" / "server",
+
+        Path.cwd()
+        / "bgutil-ytdlp-pot-provider" / "server",
+
+        Path("/opt/render/project/src/backend/bgutil-ytdlp-pot-provider/server"),
     ]
 
     for folder in possible_paths:
@@ -58,7 +71,10 @@ def find_bgutil_server():
 
 def check_bgutil_port():
     try:
-        with socket.create_connection(("127.0.0.1", BGUTIL_PORT), timeout=2):
+        with socket.create_connection(
+            (BGUTIL_HOST, BGUTIL_PORT),
+            timeout=2
+        ):
             return True
     except OSError:
         return False
@@ -68,54 +84,92 @@ def start_bgutil():
     global bgutil_process
 
     with bgutil_lock:
+
         if check_bgutil_port():
             logger.info("[BGUTIL] Server already responding")
-            return
+            return True
+
+        if bgutil_process and bgutil_process.poll() is None:
+            logger.warning("[BGUTIL] Process exists but port is not responding")
 
         server_dir = find_bgutil_server()
 
         if not server_dir:
             logger.error("[BGUTIL] build/main.js NOT FOUND")
-            return
+            return False
 
         node_path = shutil.which("node")
 
         if not node_path:
             logger.error("[BGUTIL] Node.js NOT FOUND")
-            return
+            return False
 
-        log_file = open("/tmp/bgutil.log", "a", buffering=1)
+        command = [
+            node_path,
+            "build/main.js",
+            "--host", BGUTIL_HOST,
+            "--port", str(BGUTIL_PORT),
+        ]
 
-        command = [node_path, "build/main.js"]
+        logger.info("[BGUTIL] Directory: %s", server_dir)
+        logger.info("[BGUTIL] Node: %s", node_path)
+        logger.info("[BGUTIL] Starting command: %s", command)
 
         try:
-            logger.info("[BGUTIL] Directory: %s", server_dir)
-            logger.info("[BGUTIL] Node: %s", node_path)
+            with open(BGUTIL_LOG, "a", buffering=1) as log_file:
 
-            bgutil_process = subprocess.Popen(
-                command,
-                cwd=str(server_dir),
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
+                bgutil_process = subprocess.Popen(
+                    command,
+                    cwd=str(server_dir),
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+
+            logger.info(
+                "[BGUTIL] Process started. PID: %s",
+                bgutil_process.pid
             )
 
-            time.sleep(2)
+            # Give the server time to initialize.
+            for attempt in range(15):
+                time.sleep(1)
 
-            if bgutil_process.poll() is not None:
-                logger.error(
-                    "[BGUTIL] Process exited: %s",
-                    bgutil_process.returncode
-                )
-            elif check_bgutil_port():
-                logger.info("[BGUTIL] Server is READY on port %s", BGUTIL_PORT)
-            else:
-                logger.error("[BGUTIL] Process running but port is not responding")
+                if check_bgutil_port():
+                    logger.info(
+                        "[BGUTIL] Server READY on port %s",
+                        BGUTIL_PORT
+                    )
+                    return True
+
+                exit_code = bgutil_process.poll()
+
+                if exit_code is not None:
+                    logger.error(
+                        "[BGUTIL] Process exited with code: %s",
+                        exit_code
+                    )
+                    break
+
+            logger.error("[BGUTIL] Server did not open port %s", BGUTIL_PORT)
+
+            try:
+                with open(BGUTIL_LOG, "r") as log_file:
+                    logger.error(
+                        "[BGUTIL] Server logs:\n%s",
+                        log_file.read()[-4000:]
+                    )
+            except Exception:
+                logger.exception("[BGUTIL] Could not read server log")
+
+            return False
 
         except Exception:
             logger.exception("[BGUTIL] Startup failed")
+            return False
 
 
+# Start BGUTIL when this Gunicorn worker loads the app.
 start_bgutil()
 
 
@@ -129,6 +183,7 @@ def validate_url(url):
 
     try:
         parsed = urlparse(url.strip())
+
         return (
             parsed.scheme in ("http", "https")
             and bool(parsed.netloc)
@@ -154,6 +209,7 @@ def format_size(size):
         for unit in ["B", "KB", "MB", "GB", "TB"]:
             if size < 1024 or unit == "TB":
                 return f"{size:.2f} {unit}"
+
             size /= 1024
 
     except (ValueError, TypeError):
@@ -163,31 +219,39 @@ def format_size(size):
 
 
 def make_ydl_options(extra_options=None):
+
     options = {
         "quiet": True,
-        "no_warnings": True,
+        "no_warnings": False,
         "noplaylist": True,
         "socket_timeout": 30,
         "retries": 3,
         "fragment_retries": 3,
+
         "extractor_args": {
             "youtube": {
                 "player_client": ["mweb"],
             },
+
             "youtubepot-bgutilhttp": {
                 "base_url": BGUTIL_URL,
             },
         },
-        "remote_components": {"ejs:npm"},
+
+        "remote_components": ["ejs:npm"],
     }
 
     if os.path.isfile(DENO_PATH) and os.access(DENO_PATH, os.X_OK):
         options["js_runtimes"] = {
-            "deno": {"path": DENO_PATH}
+            "deno": {
+                "path": DENO_PATH,
+            }
         }
-        logger.info("[DENO] Deno runtime configured")
+
+        logger.info("[DENO] Runtime configured")
+
     else:
-        logger.warning("[DENO] Deno not found at %s", DENO_PATH)
+        logger.warning("[DENO] Runtime not found: %s", DENO_PATH)
 
     if extra_options:
         options.update(extra_options)
@@ -209,7 +273,7 @@ def home():
 
 @app.route("/health", methods=["GET"])
 def health():
-    logger.info("LINKDROP HEALTH VERSION: NEW BGUTIL DIAGNOSTICS")
+
     deno_ready = (
         os.path.isfile(DENO_PATH)
         and os.access(DENO_PATH, os.X_OK)
@@ -218,8 +282,8 @@ def health():
     bgutil_ready = check_bgutil_port()
 
     try:
-        with open("/tmp/bgutil.log", "r") as f:
-            bgutil_logs = f.read()[-2500:]
+        with open(BGUTIL_LOG, "r") as f:
+            bgutil_logs = f.read()[-4000:]
     except Exception:
         bgutil_logs = "No BGUTIL log file"
 
@@ -244,11 +308,12 @@ def health():
 
 @app.route("/api/info", methods=["POST", "OPTIONS"])
 def video_info():
+
     if request.method == "OPTIONS":
         return "", 200
 
     data = request.get_json(silent=True) or {}
-    url = data.get("url", "").strip()
+    url = data.get("url", "")
 
     if not validate_url(url):
         return jsonify({
@@ -263,7 +328,7 @@ def video_info():
         })
 
         with YoutubeDL(options) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(url.strip(), download=False)
 
         if not info:
             raise Exception("Could not retrieve video information")
@@ -271,6 +336,7 @@ def video_info():
         formats = []
 
         for item in info.get("formats", []):
+
             if not item.get("url"):
                 continue
 
@@ -278,6 +344,7 @@ def video_info():
                 continue
 
             height = item.get("height")
+
             filesize = (
                 item.get("filesize")
                 or item.get("filesize_approx")
@@ -314,6 +381,7 @@ def video_info():
         })
 
     except Exception as error:
+
         logger.exception("[INFO ERROR]")
 
         return jsonify({
@@ -328,12 +396,14 @@ def video_info():
 
 @app.route("/api/download", methods=["POST", "OPTIONS"])
 def download_video():
+
     if request.method == "OPTIONS":
         return "", 200
 
     data = request.get_json(silent=True) or {}
 
-    url = data.get("url", "").strip()
+    url = data.get("url", "")
+
     format_id = str(data.get("format_id", "best"))
     audio_only = bool(data.get("audio_only", False))
 
@@ -343,7 +413,13 @@ def download_video():
             "error": "Please enter a valid public video URL.",
         }), 400
 
+    # Retry BGUTIL startup if it is not responding.
+    if not check_bgutil_port():
+        logger.warning("[BGUTIL] Not responding; retrying startup")
+        start_bgutil()
+
     download_id = str(uuid.uuid4())
+
     download_dir = BASE_DIR / download_id
     download_dir.mkdir(parents=True, exist_ok=True)
 
@@ -358,38 +434,46 @@ def download_video():
     })
 
     if audio_only:
+
         options.update({
             "format": "bestaudio/best",
+
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
                 "preferredquality": "192",
             }],
         })
+
     else:
+
         if format_id == "best":
+
             options["format"] = "bestvideo*+bestaudio/best"
             options["merge_output_format"] = "mp4"
+
         else:
             options["format"] = format_id
 
     try:
-        with YoutubeDL(options) as ydl:
-            ydl.download([url])
 
-        files = [
-            item for item in download_dir.iterdir()
+        with YoutubeDL(options) as ydl:
+            ydl.download([url.strip()])
+
+        downloaded_files = [
+            item
+            for item in download_dir.iterdir()
             if item.is_file()
             and not item.name.endswith((".part", ".ytdl"))
         ]
 
-        if not files:
+        if not downloaded_files:
             raise Exception(
                 "Download completed but output file was not found"
             )
 
         output_file = max(
-            files,
+            downloaded_files,
             key=lambda item: item.stat().st_size
         )
 
@@ -409,6 +493,7 @@ def download_video():
         return response
 
     except Exception as error:
+
         logger.exception("[DOWNLOAD ERROR]")
 
         shutil.rmtree(
@@ -427,6 +512,7 @@ def download_video():
 # --------------------------------------------------
 
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
