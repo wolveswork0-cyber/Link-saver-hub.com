@@ -209,11 +209,12 @@ def make_ydl_options(extra_options=None, source_url=None):
         logger.warning("[DENO] Runtime not found")
 
     # Snapchat browser impersonation
+        # Snapchat handling
     if source_url and is_snapchat_url(source_url):
-    logger.info(
-        "[SNAPCHAT] Using default HTTP client; "
-        "invalid impersonation option disabled"
-    )
+        logger.info(
+            "[SNAPCHAT] Using default HTTP client; "
+            "impersonation disabled"
+        )
     if extra_options:
         options.update(extra_options)
 
