@@ -117,7 +117,15 @@ def find_deno():
     return None
 
 
-DENO_PATH = find_deno()
+DENO_PATH = str(
+    Path(__file__).resolve().parent / ".deno" / "bin" / "deno"
+)
+
+if not (
+    os.path.isfile(DENO_PATH)
+    and os.access(DENO_PATH, os.X_OK)
+):
+    DENO_PATH = find_deno()
 
 
 # --------------------------------------------------
