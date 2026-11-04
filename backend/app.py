@@ -93,7 +93,7 @@ def start_bgutil():
             logger.info("[BGUTIL] Node: %s", node_path)
 
             bgutil_process = subprocess.Popen(
-                command,= [node_path, "build/main.js"]
+                command,
                 cwd=str(server_dir),
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
