@@ -226,31 +226,35 @@ def make_ydl_options(extra_options=None, source_url=None):
 # --------------------------------------------------
 
 def extract_info_with_fallback(url, options):
+    url = url.strip()
 
     try:
         with YoutubeDL(options) as ydl:
             return ydl.extract_info(
-                url.strip(),
+                url,
                 download=False
             )
 
-    except Exception:
-
+    except Exception as primary_error:
         if not is_snapchat_url(url):
             raise
 
         logger.warning(
-            "[SNAPCHAT] Primary extractor failed. "
-            "Trying Generic Extractor."
+            "[SNAPCHAT] Native extractor failed: %s",
+            primary_error
+        )
+
+        logger.warning(
+            "[SNAPCHAT] Trying Generic extractor explicitly"
         )
 
         fallback_options = dict(options)
-        fallback_options["force_generic_extractor"] = True
 
         with YoutubeDL(fallback_options) as ydl:
             return ydl.extract_info(
-                url.strip(),
-                download=False
+                url,
+                download=False,
+                ie_key="Generic"
             )
 
 
