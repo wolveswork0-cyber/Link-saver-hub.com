@@ -1,3 +1,4 @@
+
 import os
 import re
 import uuid
@@ -7,9 +8,11 @@ import socket
 import logging
 import subprocess
 import atexit
+import urllib.request
+import urllib.error
+
 from pathlib import Path
 from urllib.parse import urlparse
-
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from yt_dlp import YoutubeDL
@@ -27,11 +30,12 @@ logger = logging.getLogger("LinkDropPro")
 
 BASE_DIR = Path(tempfile.gettempdir()) / "linkdrop_pro"
 
-# BGUTIL POT provider
 BGUTIL_URL = "http://127.0.0.1:4416"
-BGUTIL_DIR = Path(__file__).resolve().parent / "bgutil-ytdlp-pot-provider"
+BGUTIL_DIR = (
+    Path(__file__).resolve().parent
+    / "bgutil-ytdlp-pot-provider"
+)
 
-# Deno installed by Render Build Command
 DENO_PATH = (
     Path(__file__).resolve().parent
     / ".deno"
@@ -52,10 +56,15 @@ bgutil_process = None
 def start_bgutil():
     global bgutil_process
 
-    server_file = BGUTIL_DIR / "server" / "build" / "main.js"
+    server_file = (
+        BGUTIL_DIR / "server" / "build" / "main.js"
+    )
 
     if not server_file.exists():
-        logger.warning("[BGUTIL] Server build not found: %s", server_file)
+        logger.warning(
+            "[BGUTIL] Server build not found: %s",
+            server_file
+        )
         return
 
     node_path = shutil.which("node")
@@ -82,12 +91,18 @@ def start_bgutil():
         logger.info("[BGUTIL] Server process started")
 
     except Exception as error:
-        logger.exception("[BGUTIL] Could not start: %s", error)
+        logger.exception(
+            "[BGUTIL] Could not start: %s",
+            error
+        )
 
 
 def is_bgutil_running():
     try:
-        with socket.create_connection(("127.0.0.1", 4416), timeout=2):
+        with socket.create_connection(
+            ("127.0.0.1", 4416),
+            timeout=2
+        ):
             return True
     except OSError:
         return False
@@ -169,7 +184,10 @@ def format_duration(seconds):
 # YT-DLP OPTIONS
 # --------------------------------------------------
 
-def make_ydl_options(extra_options=None, source_url=None):
+def make_ydl_options(
+    extra_options=None,
+    source_url=None
+):
 
     options = {
         "quiet": True,
@@ -195,7 +213,6 @@ def make_ydl_options(extra_options=None, source_url=None):
         "remote_components": ["ejs:npm"],
     }
 
-    # Deno JavaScript runtime
     if DENO_PATH.exists():
         options["js_runtimes"] = {
             "deno": {
@@ -203,18 +220,19 @@ def make_ydl_options(extra_options=None, source_url=None):
             }
         }
 
-        logger.info("[DENO] Runtime configured: %s", DENO_PATH)
+        logger.info(
+            "[DENO] Runtime configured: %s",
+            DENO_PATH
+        )
 
     else:
         logger.warning("[DENO] Runtime not found")
 
-    # Snapchat browser impersonation
-        # Snapchat handling
     if source_url and is_snapchat_url(source_url):
         logger.info(
-            "[SNAPCHAT] Using default HTTP client; "
-            "impersonation disabled"
+            "[SNAPCHAT] Default HTTP client enabled"
         )
+
     if extra_options:
         options.update(extra_options)
 
@@ -226,6 +244,7 @@ def make_ydl_options(extra_options=None, source_url=None):
 # --------------------------------------------------
 
 def extract_info_with_fallback(url, options):
+
     url = url.strip()
 
     try:
@@ -236,6 +255,7 @@ def extract_info_with_fallback(url, options):
             )
 
     except Exception as primary_error:
+
         if not is_snapchat_url(url):
             raise
 
@@ -245,7 +265,7 @@ def extract_info_with_fallback(url, options):
         )
 
         logger.warning(
-            "[SNAPCHAT] Trying Generic extractor explicitly"
+            "[SNAPCHAT] Trying Generic extractor"
         )
 
         fallback_options = dict(options)
@@ -259,6 +279,182 @@ def extract_info_with_fallback(url, options):
 
 
 # --------------------------------------------------
+# SNAPCHAT DIRECT VIDEO FALLBACK
+# --------------------------------------------------
+
+def download_snapchat_generic(url, download_dir):
+
+    logger.info(
+        "[SNAPCHAT] Starting Generic extraction"
+    )
+
+    options = make_ydl_options(
+        {
+            "skip_download": True,
+            "extract_flat": False,
+        },
+        source_url=url
+    )
+
+    with YoutubeDL(options) as ydl:
+        info = ydl.extract_info(
+            url,
+            download=False,
+            ie_key="Generic"
+        )
+
+    formats = [
+        item
+        for item in info.get("formats", [])
+        if item.get("url")
+    ]
+
+    if not formats:
+        raise Exception(
+            "Snapchat video URL was not found."
+        )
+
+    video_format = max(
+        formats,
+        key=lambda item: (
+            item.get("height") or 0,
+            item.get("tbr") or 0
+        )
+    )
+
+    video_url = video_format["url"]
+
+    headers = (
+        video_format.get("http_headers")
+        or info.get("http_headers")
+        or {}
+    )
+
+    request_headers = {
+        "User-Agent": headers.get(
+            "User-Agent",
+            "Mozilla/5.0"
+        )
+    }
+
+    for key, value in headers.items():
+        if key.lower() not in (
+            "host",
+            "content-length",
+            "connection",
+            "transfer-encoding"
+        ):
+            request_headers[key] = value
+
+    media_request = urllib.request.Request(
+        video_url,
+        headers=request_headers
+    )
+
+    logger.info(
+        "[SNAPCHAT] Checking direct video response"
+    )
+
+    with urllib.request.urlopen(
+        media_request,
+        timeout=120
+    ) as response:
+
+        content_type = (
+            response.headers.get(
+                "Content-Type", ""
+            )
+            .split(";")[0]
+            .strip()
+            .lower()
+        )
+
+        first_bytes = response.read(32)
+
+        logger.info(
+            "[SNAPCHAT] Media Content-Type: %s",
+            content_type
+        )
+
+        # Verify actual media type
+        if (
+            len(first_bytes) >= 8
+            and first_bytes[4:8] == b"ftyp"
+        ):
+            extension = ".mp4"
+
+        elif first_bytes.startswith(
+            b"\x1a\x45\xdf\xa3"
+        ):
+            extension = ".webm"
+
+        elif content_type == "video/mp4":
+            extension = ".mp4"
+
+        elif content_type == "video/webm":
+            extension = ".webm"
+
+        elif content_type == "video/quicktime":
+            extension = ".mov"
+
+        elif content_type == "video/3gpp":
+            extension = ".3gp"
+
+        else:
+            raise Exception(
+                "Response is not a verified video. "
+                "Content-Type: " + content_type
+            )
+
+        safe_title = re.sub(
+            r"[^\w\- ]",
+            "",
+            info.get("title") or "snapchat_video"
+        ).strip()[:100]
+
+        if not safe_title:
+            safe_title = "snapchat_video"
+
+        filename = (
+            download_dir
+            / (safe_title + extension)
+        )
+
+        logger.info(
+            "[SNAPCHAT] Saving verified video: %s",
+            filename.name
+        )
+
+        with open(filename, "wb") as output_file:
+
+            output_file.write(first_bytes)
+
+            while True:
+                chunk = response.read(
+                    1024 * 256
+                )
+
+                if not chunk:
+                    break
+
+                output_file.write(chunk)
+
+    if (
+        not filename.exists()
+        or filename.stat().st_size == 0
+    ):
+        raise Exception(
+            "Snapchat video file is empty."
+        )
+
+    logger.info(
+        "[SNAPCHAT] Direct video download completed"
+    )
+
+    return filename
+
+
+# --------------------------------------------------
 # HOME ROUTE
 # --------------------------------------------------
 
@@ -268,7 +464,9 @@ def home():
     return jsonify({
         "name": "LinkDrop Pro API",
         "status": "online",
-        "message": "Universal Link Downloader API is running"
+        "message": (
+            "Universal Link Downloader API is running"
+        )
     })
 
 
@@ -279,13 +477,20 @@ def home():
 @app.route("/health", methods=["GET"])
 def health():
 
-    deno_ok = DENO_PATH.exists()
+    deno_ok = (
+        DENO_PATH.exists()
+        and os.access(DENO_PATH, os.X_OK)
+    )
+
     bgutil_ok = is_bgutil_running()
 
     return jsonify({
         "status": "online",
         "deno": deno_ok,
-        "deno_path": str(DENO_PATH) if deno_ok else None,
+        "deno_path": (
+            str(DENO_PATH)
+            if deno_ok else None
+        ),
         "bgutil": bgutil_ok,
         "node": shutil.which("node") is not None,
     })
@@ -295,14 +500,20 @@ def health():
 # VIDEO INFORMATION API
 # --------------------------------------------------
 
-@app.route("/api/info", methods=["POST", "OPTIONS"])
+@app.route(
+    "/api/info",
+    methods=["POST", "OPTIONS"]
+)
 def video_info():
 
     if request.method == "OPTIONS":
         return "", 204
 
     data = request.get_json(silent=True) or {}
-    url = str(data.get("url", "")).strip()
+
+    url = str(
+        data.get("url", "")
+    ).strip()
 
     if not is_valid_url(url):
         return jsonify({
@@ -312,12 +523,23 @@ def video_info():
 
     try:
 
-        options = make_ydl_options({
-            "skip_download": True,
-            "extract_flat": False,
-        }, source_url=url)
+        options = make_ydl_options(
+            {
+                "skip_download": True,
+                "extract_flat": False,
+            },
+            source_url=url
+        )
 
-        info = extract_info_with_fallback(url, options)
+        info = extract_info_with_fallback(
+            url,
+            options
+        )
+
+        if not info:
+            raise Exception(
+                "Video information could not be extracted."
+            )
 
         formats = []
 
@@ -329,6 +551,7 @@ def video_info():
             formats.append({
                 "format_id": item.get("format_id"),
                 "ext": item.get("ext"),
+
                 "resolution": (
                     item.get("resolution")
                     or (
@@ -337,37 +560,52 @@ def video_info():
                         else "Unknown"
                     )
                 ),
+
                 "filesize": item.get("filesize"),
+
                 "filesize_text": format_filesize(
                     item.get("filesize")
                     or item.get("filesize_approx")
                 ),
+
                 "format_note": item.get("format_note"),
             })
 
         return jsonify({
             "success": True,
-            "title": info.get("title") or "Video",
+
+            "title": (
+                info.get("title") or "Video"
+            ),
+
             "thumbnail": info.get("thumbnail"),
+
             "duration": info.get("duration"),
+
             "duration_string": format_duration(
                 info.get("duration")
             ),
+
             "uploader": info.get("uploader"),
+
             "filesize": (
                 info.get("filesize")
                 or info.get("filesize_approx")
             ),
+
             "filesize_text": format_filesize(
                 info.get("filesize")
                 or info.get("filesize_approx")
             ),
+
             "formats": formats,
         })
 
     except Exception as error:
 
-        logger.exception("[INFO] Extraction failed")
+        logger.exception(
+            "[INFO] Extraction failed"
+        )
 
         return jsonify({
             "success": False,
@@ -379,52 +617,90 @@ def video_info():
 # VIDEO DOWNLOAD API
 # --------------------------------------------------
 
-@app.route("/api/download", methods=["POST", "OPTIONS"])
+@app.route(
+    "/api/download",
+    methods=["POST", "OPTIONS"]
+)
 def download_video():
 
     if request.method == "OPTIONS":
         return "", 204
 
     data = request.get_json(silent=True) or {}
-    url = str(data.get("url", "")).strip()
+
+    url = str(
+        data.get("url", "")
+    ).strip()
 
     if not is_valid_url(url):
         return jsonify({
             "error": "Enter a valid http/https URL."
         }), 400
 
-    download_dir = BASE_DIR / str(uuid.uuid4())
-    download_dir.mkdir(parents=True, exist_ok=True)
+    download_dir = (
+        BASE_DIR / str(uuid.uuid4())
+    )
+
+    download_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
     try:
 
         output_template = str(
-            download_dir / "%(title).120s.%(ext)s"
+            download_dir
+            / "%(title).120s.%(ext)s"
         )
 
-        options = make_ydl_options({
-            "outtmpl": output_template,
-            "noplaylist": True,
-            "overwrites": True,
-            "verbose": True,
-        }, source_url=url)
+        options = make_ydl_options(
+            {
+                "outtmpl": output_template,
+                "noplaylist": True,
+                "overwrites": True,
+                "verbose": True,
+            },
+            source_url=url
+        )
 
-        # First normal download attempt
+        # Normal yt-dlp download first
         try:
 
             with YoutubeDL(options) as ydl:
                 ydl.download([url])
 
-        except Exception:
+        except Exception as primary_error:
 
             if not is_snapchat_url(url):
                 raise
 
             logger.warning(
-                "[SNAPCHAT] Download fallback activated"
+                "[SNAPCHAT] Native download failed: %s",
+                primary_error
             )
 
-            # Remove partial files before retry
+        # Check whether a file was downloaded
+        downloaded_files = [
+            item
+            for item in download_dir.iterdir()
+            if (
+                item.is_file()
+                and not item.name.endswith(
+                    (".part", ".ytdl")
+                )
+            )
+        ]
+
+        # Snapchat direct fallback if needed
+        if (
+            is_snapchat_url(url)
+            and not downloaded_files
+        ):
+
+            logger.warning(
+                "[SNAPCHAT] Trying verified direct fallback"
+            )
+
             for item in download_dir.iterdir():
 
                 if item.is_file():
@@ -436,28 +712,30 @@ def download_video():
                         ignore_errors=True
                     )
 
-            fallback_options = dict(options)
-            fallback_options["force_generic_extractor"] = True
+            download_snapchat_generic(
+                url,
+                download_dir
+            )
 
-            with YoutubeDL(fallback_options) as ydl:
-                ydl.download([url])
-
-        # Find downloaded media file
-        downloaded_files = [
-            file for file in download_dir.iterdir()
-            if file.is_file()
-            and not file.name.endswith((".part", ".ytdl"))
-        ]
+            downloaded_files = [
+                item
+                for item in download_dir.iterdir()
+                if (
+                    item.is_file()
+                    and not item.name.endswith(
+                        (".part", ".ytdl")
+                    )
+                )
+            ]
 
         if not downloaded_files:
             raise Exception(
                 "No downloadable media file was created."
             )
 
-        # Select largest downloaded file
         filename = max(
             downloaded_files,
-            key=lambda file: file.stat().st_size
+            key=lambda item: item.stat().st_size
         )
 
         response = send_file(
@@ -466,7 +744,6 @@ def download_video():
             download_name=filename.name
         )
 
-        # Delete temporary files after response is sent
         response.call_on_close(
             lambda: shutil.rmtree(
                 download_dir,
@@ -478,7 +755,9 @@ def download_video():
 
     except Exception as error:
 
-        logger.exception("[DOWNLOAD] Download failed")
+        logger.exception(
+            "[DOWNLOAD] Download failed"
+        )
 
         shutil.rmtree(
             download_dir,
@@ -499,5 +778,7 @@ if __name__ == "__main__":
 
     app.run(
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000))
+        port=int(
+            os.environ.get("PORT", 5000)
+        )
     )
