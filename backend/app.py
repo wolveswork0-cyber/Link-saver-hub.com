@@ -183,7 +183,15 @@ def format_duration(seconds):
 # --------------------------------------------------
 # YT-DLP OPTIONS
 # --------------------------------------------------
+class YtDlpLogger:
+    def debug(self, message):
+        logger.info("[YTDLP] %s", message)
 
+    def warning(self, message):
+        logger.warning("[YTDLP] %s", message)
+
+    def error(self, message):
+        logger.error("[YTDLP] %s", message)
 def make_ydl_options(
     extra_options=None,
     source_url=None
@@ -192,6 +200,7 @@ def make_ydl_options(
     options = {
         "quiet": True,
         "no_warnings": False,
+        "logger": YtDlpLogger(),
         "noplaylist": True,
 
         "socket_timeout": 30,
@@ -524,11 +533,12 @@ def video_info():
     try:
 
         options = make_ydl_options(
-            {
-                "skip_download": True,
-                "extract_flat": False,
-            },
-            source_url=url
+    {
+        "skip_download": True,
+        "extract_flat": False,
+        "verbose": True,
+    },
+    source_url=url
         )
 
         info = extract_info_with_fallback(
