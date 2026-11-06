@@ -202,8 +202,8 @@ def make_ydl_options(
 
         "extractor_args": {
             "youtube": {
-                "player_client": ["android"],
-            },
+    "player_client": ["tv", "web_safari"],
+},
 
             "youtubepot-bgutilhttp": {
                 "base_url": BGUTIL_URL,
