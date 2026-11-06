@@ -402,6 +402,7 @@ def download_video():
             "outtmpl": output_template,
             "noplaylist": True,
             "overwrites": True,
+            "verbose": True,
         }, source_url=url)
 
         # First normal download attempt
