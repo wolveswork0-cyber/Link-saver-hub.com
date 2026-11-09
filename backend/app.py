@@ -500,54 +500,7 @@ def health():
         "node": shutil.which("node") is not None,
     })
 
-# --------------------------------------------------
-# OUTBOUND PUBLIC IP CHECK
-# --------------------------------------------------
 
-@app.route("/debug/outbound-ip", methods=["GET"])
-def outbound_ip():
-
-    services = [
-        "https://api.ipify.org",
-        "https://checkip.amazonaws.com",
-    ]
-
-    errors = []
-
-    for service in services:
-        try:
-            req = urllib.request.Request(
-                service,
-                headers={
-                    "User-Agent": "LinkDropPro-IP-Check"
-                }
-            )
-
-            with urllib.request.urlopen(
-                req,
-                timeout=10
-            ) as response:
-
-                public_ip = response.read(
-                    100
-                ).decode("utf-8").strip()
-
-                import ipaddress
-                ipaddress.ip_address(public_ip)
-
-                return jsonify({
-                    "success": True,
-                    "outbound_ip": public_ip,
-                    "region": "Oregon (US West)"
-                })
-
-        except Exception as error:
-            errors.append(str(error))
-
-    return jsonify({
-        "success": False,
-        "errors": errors
-    }), 503
 # --------------------------------------------------
 # VIDEO INFORMATION API
 # --------------------------------------------------
