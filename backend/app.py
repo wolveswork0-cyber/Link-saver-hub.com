@@ -210,10 +210,6 @@ def make_ydl_options(
         "format": "best[ext=mp4]/best",
 
         "extractor_args": {
-            "youtube": {
-    "player_client": ["android_vr", "web_embedded"],
-},
-
             "youtubepot-bgutilhttp": {
                 "base_url": BGUTIL_URL,
             },
