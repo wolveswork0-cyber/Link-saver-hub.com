@@ -211,7 +211,7 @@ def make_ydl_options(
 
         "extractor_args": {
             "youtube": {
-    "player_client": ["mweb", "tv", "web_safari"],
+    "player_client": ["android_vr", "web_embedded"],
 },
 
             "youtubepot-bgutilhttp": {
