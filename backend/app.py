@@ -210,10 +210,13 @@ def make_ydl_options(
         "format": "best[ext=mp4]/best",
 
         "extractor_args": {
-            "youtubepot-bgutilhttp": {
-                "base_url": BGUTIL_URL,
-            },
-        },
+    "youtube": {
+        "player_client": ["ios"],
+    },
+    "youtubepot-bgutilhttp": {
+        "base_url": BGUTIL_URL,
+    },
+},
 
         "remote_components": ["ejs:npm"],
     }
