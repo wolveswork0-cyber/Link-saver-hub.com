@@ -151,7 +151,7 @@ async function showOptions(url) {
 
     form.parentNode.insertBefore(box, form.nextSibling);
 
-    // Automatically scroll to format selection after formats load.
+    // Automatically scroll to uper format selection after formats load.
     requestAnimationFrame(() => {
         box.scrollIntoView({
             behavior: "smooth",
