@@ -151,6 +151,14 @@ async function showOptions(url) {
 
     form.parentNode.insertBefore(box, form.nextSibling);
 
+    // Automatically scroll to format selection after formats load.
+    requestAnimationFrame(() => {
+        box.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+        });
+    });
+
     box.querySelectorAll("button[data-format]").forEach(button => {
         button.addEventListener("click", () => {
             const format = button.dataset.format;
