@@ -13,11 +13,12 @@ button,input{font:inherit}button{cursor:pointer}
 .hero h1{margin:25px 0 17px;color:white;font-size:clamp(38px,6vw,65px);line-height:1.08;letter-spacing:-2.5px;font-weight:850}
 .hero h1 span{color:var(--cyan);text-shadow:0 0 30px rgba(34,211,238,.2)}
 .download-panel{max-width:790px;margin:38px auto 0;padding:27px;text-align:left;background:linear-gradient(145deg,#102743,#0a1b31);border:1px solid rgba(34,211,238,.25);border-radius:21px;box-shadow:0 20px 65px rgba(0,0,0,.3),0 0 35px rgba(34,211,238,.06)}
-#downloadBtn{width:100%;height:57px;margin:0 0 18px;color:#041521;background:linear-gradient(100deg,#22d3ee,#38bdf8);border:0;border-radius:12px;font-size:16px;font-weight:850;box-shadow:0 8px 25px rgba(34,211,238,.18);transition:.2s}
-#downloadBtn span{margin-right:8px;font-size:21px}#downloadBtn:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(34,211,238,.3)}#downloadBtn:disabled{opacity:.6;cursor:not-allowed;transform:none}
-.hero-description{max-width:640px;margin:0 auto 20px;color:var(--muted);font-size:14px;line-height:1.8;text-align:center}
 .input-label{display:block;margin:0 0 12px;color:#a9bed8;font-size:11px;font-weight:800;letter-spacing:1.2px}
-.input-wrap{display:flex;align-items:center;gap:12px;height:60px;padding:0 17px;background:#071528;border:1px solid #2a4564;border-radius:12px}
+.input-action-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;gap:12px}
+#downloadBtn{width:auto;min-width:190px;height:60px;margin:0;padding:0 23px;color:#041521;background:linear-gradient(100deg,#22d3ee,#38bdf8);border:0;border-radius:12px;font-size:15px;font-weight:850;white-space:nowrap;box-shadow:0 8px 25px rgba(34,211,238,.18);transition:transform .2s,box-shadow .2s;cursor:pointer}
+#downloadBtn span{margin-right:8px;font-size:21px}#downloadBtn:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(34,211,238,.3)}#downloadBtn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.hero-description{max-width:680px;margin:18px auto 0;color:var(--muted);font-size:14px;line-height:1.8;text-align:center}
+.input-wrap{display:flex;align-items:center;gap:12px;height:60px;min-width:0;padding:0 17px;background:#071528;border:1px solid #2a4564;border-radius:12px}
 .link-icon{font-size:19px}#url{flex:1;width:100%;min-width:0;height:100%;color:white;background:transparent;border:0;outline:0;font-size:14px}#url::placeholder{color:#7188a5}
 .input-wrap:focus-within{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(34,211,238,.1)}
 #msg{margin:15px 0 0;color:var(--muted);text-align:center;font-size:12px;line-height:1.6}
@@ -61,3 +62,15 @@ body:not(.dark) .platform-card:hover{background:#edf7ff}body:not(.dark) .footer-
 .hero h1{font-size:39px;letter-spacing:-1.6px}.download-panel{padding:19px 14px;border-radius:16px}.input-wrap{height:55px;padding:0 11px;gap:8px}
 #url{font-size:12px}.trust-line{gap:12px;font-size:10px}section:not(.hero){margin:48px 0}.platform-grid{grid-template-columns:repeat(2,1fr);gap:10px}
 .platform-card{min-height:115px}.feature-grid{grid-template-columns:1fr}.recent-box{padding:13px}.download-option{gap:8px;padding:10px}.option-size{font-size:10px;max-width:90px}}
+
+
+/* LinkDrop Pro input and download action stay side by side on phones. */
+@media(max-width:520px){
+  .download-panel{padding:18px 14px;border-radius:17px}
+  .input-action-row{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .input-wrap{height:56px;padding:0 10px;gap:7px}
+  #downloadBtn{min-width:0;height:56px;padding:0 12px;font-size:12px}
+  #downloadBtn span{margin-right:4px;font-size:17px}
+  #url{font-size:12px}
+  .hero-description{font-size:13px;line-height:1.7;margin-top:16px}
+}
