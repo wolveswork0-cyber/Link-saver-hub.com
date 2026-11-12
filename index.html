@@ -59,18 +59,18 @@
   <h1>Free Video & Media Downloader<br><span>From Any Supported Link</span></h1>
 
   <form class="download-panel" id="form">
-    <button id="downloadBtn" type="submit"><span>↓</span> Download Now</button>
-
+    <label class="input-label" for="url">PASTE YOUR VIDEO LINK</label>
+    <div class="input-action-row">
+      <div class="input-wrap">
+        <span class="link-icon">🔗</span>
+        <input type="url" id="url" name="url" placeholder="https://www.example.com/video..." autocomplete="url" aria-label="Video or media URL" required>
+      </div>
+      <button id="downloadBtn" type="submit"><span>↓</span> Download Now</button>
+    </div>
     <p class="hero-description">
       LinkDrop Pro is a free online video downloader for supported public media links.
       Paste a TikTok, Facebook, Instagram, X or Snapchat URL and start the download process in a few clicks.
     </p>
-
-    <label class="input-label" for="url">PASTE YOUR VIDEO LINK</label>
-    <div class="input-wrap">
-      <span class="link-icon">🔗</span>
-      <input type="url" id="url" name="url" placeholder="https://www.example.com/video..." autocomplete="url" aria-label="Video or media URL" required>
-    </div>
     <p id="msg" aria-live="polite">🔒 No account required. Paste a public link to get started.</p>
   </form>
 
